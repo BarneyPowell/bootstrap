@@ -754,7 +754,7 @@ ensure_zshrc() {
   local start='# >>> bootstrap managed block >>>'
   local end='# <<< bootstrap managed block <<<'
   local block
-  block="$(cat <<'BLOCK'
+  IFS= read -r -d '' block <<'BLOCK' || true
 # >>> bootstrap managed block >>>
 # Keep user-local binaries available, including Starship installed without sudo.
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
@@ -772,7 +772,6 @@ if [[ -f "$HOME/.zshrc.local" ]]; then
 fi
 # <<< bootstrap managed block <<<
 BLOCK
-)"
 
   if grep -qF "$start" "$zshrc"; then
     log "Updating managed block in $zshrc"
