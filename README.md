@@ -95,8 +95,8 @@ Release process:
 
 1. Commit changes to `main`.
 2. Create an exact patch tag, e.g. `v1.1.1`.
-3. Move the floating minor tag, e.g. `v1.1`, to the same commit.
-4. Move the floating major tag, e.g. `v1`, to the same commit if it is the latest stable v1 release.
+3. Run `scripts/update-floating-tags.sh --dry-run` to preview floating tag updates.
+4. Run `scripts/update-floating-tags.sh --push` to move and push floating tags like `v1` and `v1.1`.
 5. Create a GitHub release for the new version.
 
 Moving floating tags requires a tag force-push by design; exact patch tags should not be moved after publication.
@@ -115,6 +115,18 @@ Moving floating tags requires a tag force-push by design; exact patch tags shoul
 --no-chsh            Do not offer to change the user's login shell
 -h, --help           Show help
 ```
+
+## Developer scripts
+
+Update floating version tags locally from exact patch tags:
+
+```sh
+scripts/update-floating-tags.sh --dry-run
+scripts/update-floating-tags.sh
+scripts/update-floating-tags.sh --push
+```
+
+This keeps tags like `v1` and `v1.2` pointed at the latest exact patch tag in their version class. It is intended for local release maintenance, not for end-user installs.
 
 ## Notes
 
