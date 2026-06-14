@@ -757,10 +757,9 @@ ensure_zshrc() {
   block="$(cat <<'BLOCK'
 # >>> bootstrap managed block >>>
 # Keep user-local binaries available, including Starship installed without sudo.
-case ":$PATH:" in
-  *":$HOME/.local/bin:"*) ;;
-  *) export PATH="$HOME/.local/bin:$PATH" ;;
-esac
+if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+  export PATH="$HOME/.local/bin:$PATH"
+fi
 
 # Starship prompt. Oh My Zsh can still manage plugins/completion; Starship owns prompt rendering.
 if command -v starship >/dev/null 2>&1; then
