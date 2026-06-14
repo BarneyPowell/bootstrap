@@ -5,7 +5,11 @@ set -euo pipefail
 # Public-safe: no hard-coded usernames, hostnames, secrets, or private paths.
 
 BOOTSTRAP_REPO_RAW="https://raw.githubusercontent.com/BarneyPowell/bootstrap/main"
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
+if [[ -n "${BASH_SOURCE[0]-}" && -f "${BASH_SOURCE[0]}" ]]; then
+  SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
+else
+  SCRIPT_DIR=""
+fi
 
 ASSUME_YES=0
 DRY_RUN=0
@@ -16,6 +20,7 @@ DO_STARSHIP=1
 DO_FONTS=1
 DO_OPTIONAL=1
 DO_CHSH=1
+GUM_EARLY_ATTEMPTED=0
 
 BREW_CORE_PACKAGES=(
   git
@@ -45,6 +50,8 @@ MACOS_FONT_CASKS=(
   font-fira-code-nerd-font
   font-jetbrains-mono-nerd-font
 )
+
+GUM_VERSION="0.17.0"
 
 usage() {
   cat <<'USAGE'
@@ -115,18 +122,23 @@ ask() {
     return 0
   fi
 
-  if command_exists gum; then
-    gum confirm "$prompt"
+  if command_exists gum && [[ -r /dev/tty ]]; then
+    gum confirm "$prompt" </dev/tty
     return $?
   fi
 
-  printf '%s [y/N] ' "$prompt"
-  local reply
-  read -r reply || true
-  case "$reply" in
-    y|Y|yes|YES) return 0 ;;
-    *) return 1 ;;
-  esac
+  if [[ -r /dev/tty ]]; then
+    printf '%s [y/N] ' "$prompt" >/dev/tty
+    local reply
+    read -r reply </dev/tty || true
+    case "$reply" in
+      y|Y|yes|YES) return 0 ;;
+      *) return 1 ;;
+    esac
+  fi
+
+  warn "No interactive terminal available; defaulting to no for: $prompt"
+  return 1
 }
 
 backup_file() {
@@ -156,6 +168,49 @@ apt_available() {
   command_exists apt-get
 }
 
+apt_has_package() {
+  local pkg="$1"
+  command_exists apt-cache && apt-cache show "$pkg" >/dev/null 2>&1
+}
+
+install_gum_from_github_release() {
+  local os arch asset url tmpdir
+  os="$(os_name)"
+  if [[ "$os" != "linux" && "$os" != "wsl" ]]; then
+    return 1
+  fi
+
+  case "$(uname -m)" in
+    x86_64|amd64) arch="x86_64" ;;
+    aarch64|arm64) arch="arm64" ;;
+    armv7l) arch="armv7" ;;
+    armv6l) arch="armv6" ;;
+    i386|i686) arch="i386" ;;
+    *)
+      warn "Unsupported architecture for gum release install: $(uname -m)"
+      return 1
+      ;;
+  esac
+
+  asset="gum_${GUM_VERSION}_Linux_${arch}.tar.gz"
+  url="https://github.com/charmbracelet/gum/releases/download/v${GUM_VERSION}/${asset}"
+
+  log "Installing gum ${GUM_VERSION} from GitHub release"
+  if [[ "$DRY_RUN" == 1 ]]; then
+    printf 'DRY-RUN: download %s and install gum to %s/.local/bin/gum\n' "$url" "$HOME"
+    return 0
+  fi
+
+  tmpdir="$(mktemp -d)"
+  curl -fsSL "$url" -o "$tmpdir/gum.tar.gz"
+  tar -xzf "$tmpdir/gum.tar.gz" -C "$tmpdir"
+  mkdir -p "$HOME/.local/bin"
+  find "$tmpdir" -type f -name gum -perm -111 -exec cp {} "$HOME/.local/bin/gum" \; -quit
+  rm -rf "$tmpdir"
+  chmod +x "$HOME/.local/bin/gum"
+  export PATH="$HOME/.local/bin:$PATH"
+}
+
 run_sudo() {
   if [[ "$(id -u)" == 0 ]]; then
     run "$@"
@@ -182,6 +237,11 @@ ensure_gum_early() {
     return
   fi
 
+  if [[ "$GUM_EARLY_ATTEMPTED" == 1 ]] && ! command_exists brew; then
+    return
+  fi
+  GUM_EARLY_ATTEMPTED=1
+
   log "gum not found; trying to install it early for a nicer setup UI"
 
   ensure_brew_shellenv
@@ -191,13 +251,25 @@ ensure_gum_early() {
     return
   fi
 
-  if apt_available && ask "Install gum with apt?"; then
-    if apt_install_packages gum; then
-      return
-    fi
-    warn "apt could not install gum; continuing with plain prompts"
-    return
-  fi
+  case "$(os_name)" in
+    linux|wsl)
+      if ask "Install gum for nicer setup prompts?"; then
+        if apt_available && apt_has_package gum; then
+          if apt_install_packages gum; then
+            return
+          fi
+          warn "apt could not install gum; trying GitHub release fallback"
+        fi
+
+        if install_gum_from_github_release; then
+          return
+        fi
+
+        warn "gum install failed; continuing with plain prompts"
+        return
+      fi
+      ;;
+  esac
 
   warn "gum unavailable; continuing with plain prompts"
 }
@@ -292,8 +364,8 @@ ensure_homebrew() {
 
   local os
   os="$(os_name)"
-  if [[ "$os" != "macos" && "$os" != "linux" && "$os" != "wsl" ]]; then
-    warn "Unsupported OS for Homebrew auto-install: $os"
+  if [[ "$os" != "macos" ]]; then
+    warn "Homebrew not found; not installing Homebrew on $os"
     return
   fi
 
@@ -442,8 +514,12 @@ ensure_omz() {
 }
 
 starship_config_source() {
-  local local_file="$SCRIPT_DIR/files/starship.toml"
-  if [[ -f "$local_file" ]]; then
+  local local_file=""
+  if [[ -n "$SCRIPT_DIR" ]]; then
+    local_file="$SCRIPT_DIR/files/starship.toml"
+  fi
+
+  if [[ -n "$local_file" && -f "$local_file" ]]; then
     printf '%s' "$local_file"
   else
     printf '%s' "${BOOTSTRAP_REPO_RAW}/files/starship.toml"

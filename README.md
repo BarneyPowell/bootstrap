@@ -10,7 +10,9 @@ Current v1 setup:
 
 - Detects macOS, Linux, and WSL-ish environments
 - Bootstraps `gum` early where possible, then uses it for nicer confirmations and styled output
-- Checks/installs Homebrew where appropriate
+  - macOS: installs via Homebrew when available
+  - Debian/Raspberry Pi OS/WSL: uses apt if `gum` exists there, otherwise installs the official Linux release to `~/.local/bin`
+- Checks/installs Homebrew on macOS only; Linux installs do not prompt for Homebrew
 - Installs core command line tools when Homebrew is available:
   - `git`, `gh`, `jq`, `ripgrep`, `fd`, `fzf`, `bat`, `eza`, `zoxide`, `direnv`, `starship`
 - Asks about optional tools:
@@ -28,10 +30,10 @@ The script is designed to be idempotent: running it repeatedly should not duplic
 
 ## Safer usage
 
-Use a version tag for repeatable installs. `v1` will always mean the v1 installer:
+Use a version tag for repeatable installs. `v1.1` will always mean the v1.1 installer:
 
 ```sh
-curl -fsSLO https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1/install.sh
+curl -fsSLO https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1.1/install.sh
 less install.sh
 bash install.sh --dry-run
 bash install.sh
@@ -39,10 +41,10 @@ bash install.sh
 
 ## One-liner usage
 
-Stable v1:
+Stable v1.1:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1.1/install.sh | bash
 ```
 
 Latest from `main`:
@@ -51,10 +53,10 @@ Latest from `main`:
 curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/main/install.sh | bash
 ```
 
-For non-interactive stable v1 setup:
+For non-interactive stable v1.1 setup:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1/install.sh | bash -s -- --yes
+curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1.1/install.sh | bash -s -- --yes
 ```
 
 ## Options
