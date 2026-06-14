@@ -1,0 +1,35 @@
+# Barney's Starship prompt defaults
+# Safe for public repos: no usernames, hostnames, secrets, or machine-specific paths.
+
+[username]
+show_always = false
+format = "[$user](bold yellow)@"
+
+[hostname]
+ssh_only = true
+format = "[$hostname](bold cyan) "
+
+[directory]
+truncation_length = 3
+truncate_to_repo = true
+
+[git_branch]
+format = "[$symbol$branch](bold purple) "
+
+[git_status]
+format = '([$all_status$ahead_behind](bold red) )'
+
+[nodejs]
+detect_files = ["package.json", ".node-version"]
+format = "[$symbol($version)](bold green) "
+
+[python]
+format = "[$symbol$pyenv_prefix($version)](bold yellow) "
+
+[cmd_duration]
+min_time = 5000
+format = "took [$duration](bold yellow) "
+
+[character]
+success_symbol = "[❯](bold green)"
+error_symbol = "[❯](bold red)"
