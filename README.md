@@ -8,6 +8,7 @@ This repo sets up a shell/dev environment without hard-coding a username, hostna
 
 Current v1 setup:
 
+- Shows a friendly pre-flight banner before making changes, including the installer version, detected environment, installed tools, and planned actions
 - Detects macOS, Linux, and WSL-ish environments
 - Bootstraps `gum` early where possible, then uses it for nicer confirmations and styled output
   - macOS: installs via Homebrew when available
@@ -30,10 +31,10 @@ The script is designed to be idempotent: running it repeatedly should not duplic
 
 ## Safer usage
 
-Use a version tag for repeatable installs. `v1.1` will always mean the v1.1 installer:
+Use a version tag for repeatable installs. `v1.2` will always mean the latest v1.2.x installer:
 
 ```sh
-curl -fsSLO https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1.1/install.sh
+curl -fsSLO https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1.2/install.sh
 less install.sh
 bash install.sh --dry-run
 bash install.sh
@@ -41,10 +42,10 @@ bash install.sh
 
 ## One-liner usage
 
-Stable v1.1:
+Stable v1.2:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1.1/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1.2/install.sh | bash
 ```
 
 Latest from `main`:
@@ -53,10 +54,10 @@ Latest from `main`:
 curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/main/install.sh | bash
 ```
 
-For non-interactive stable v1.1 setup:
+For non-interactive stable v1.2 setup:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1.1/install.sh | bash -s -- --yes
+curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1.2/install.sh | bash -s -- --yes
 ```
 
 ## Versioning strategy

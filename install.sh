@@ -5,6 +5,7 @@ set -euo pipefail
 # Public-safe: no hard-coded usernames, hostnames, secrets, or private paths.
 
 BOOTSTRAP_REPO_RAW="https://raw.githubusercontent.com/BarneyPowell/bootstrap/main"
+BOOTSTRAP_VERSION="v1.2.0"
 if [[ -n "${BASH_SOURCE[0]-}" && -f "${BASH_SOURCE[0]}" ]]; then
   SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
 else
@@ -122,15 +123,18 @@ ask() {
     return 0
   fi
 
-  if command_exists gum && [[ -r /dev/tty ]]; then
-    gum confirm "$prompt" </dev/tty
-    return $?
-  fi
+  if { exec 3</dev/tty; } 2>/dev/null; then
+    if command_exists gum; then
+      gum confirm "$prompt" <&3
+      local result=$?
+      exec 3<&-
+      return "$result"
+    fi
 
-  if [[ -r /dev/tty ]]; then
     printf '%s [y/N] ' "$prompt" >/dev/tty
     local reply
-    read -r reply </dev/tty || true
+    read -r reply <&3 || true
+    exec 3<&-
     case "$reply" in
       y|Y|yes|YES) return 0 ;;
       *) return 1 ;;
@@ -148,6 +152,174 @@ backup_file() {
     log "Backing up $path to $backup"
     run cp "$path" "$backup"
   fi
+}
+
+status_text() {
+  local label="$1"
+  local detail="$2"
+  printf '  - %-22s %s\n' "$label" "$detail"
+}
+
+command_status() {
+  local command_name="$1"
+  if command_exists "$command_name"; then
+    printf 'installed (%s)' "$(command -v "$command_name")"
+  else
+    printf 'not installed'
+  fi
+}
+
+brew_package_status() {
+  local pkg="$1"
+  if ! command_exists brew; then
+    printf 'brew unavailable'
+  elif brew list --formula "$pkg" >/dev/null 2>&1; then
+    printf 'installed'
+  else
+    printf 'will install'
+  fi
+}
+
+brew_cask_status() {
+  local cask="$1"
+  if ! command_exists brew; then
+    printf 'brew unavailable'
+  elif brew list --cask "$cask" >/dev/null 2>&1; then
+    printf 'installed'
+  else
+    printf 'can install'
+  fi
+}
+
+print_intro() {
+  local os arch user shell_name brew_state gum_state zsh_state starship_state omz_state starship_config_state zshrc_state
+  os="$(os_name)"
+  arch="$(uname -m)"
+  user="$(id -un)"
+  shell_name="${SHELL:-unknown}"
+
+  if command_exists brew; then
+    brew_state="installed ($(brew --prefix))"
+  elif [[ "$DO_BREW" == 1 && "$os" == "macos" ]]; then
+    brew_state="will offer to install"
+  elif [[ "$DO_BREW" != 1 ]]; then
+    brew_state="skipped by flag"
+  else
+    brew_state="not installed; will not install on $os"
+  fi
+
+  gum_state="$(command_status gum)"
+  zsh_state="$(command_status zsh)"
+  starship_state="$(command_status starship)"
+
+  if [[ -d "$HOME/.oh-my-zsh" ]]; then
+    omz_state="installed"
+  elif [[ "$DO_OMZ" == 1 ]]; then
+    omz_state="will offer to install"
+  else
+    omz_state="skipped by flag"
+  fi
+
+  if [[ -f "$HOME/.config/starship.toml" ]]; then
+    starship_config_state="exists; will back up before updating"
+  elif [[ "$DO_STARSHIP" == 1 ]]; then
+    starship_config_state="will create"
+  else
+    starship_config_state="skipped by flag"
+  fi
+
+  if [[ -f "$HOME/.zshrc" ]]; then
+    zshrc_state="exists; will back up before updating"
+  else
+    zshrc_state="will create"
+  fi
+
+  if command_exists gum; then
+    gum style --border rounded --padding "1 2" --foreground 39 --bold "Barney bootstrap ${BOOTSTRAP_VERSION}"
+  else
+    printf '\n\033[1;36m%s\033[0m\n' "╭─────────────────────────────╮"
+    printf '\033[1;36m│ %-27s │\033[0m\n' "Barney bootstrap ${BOOTSTRAP_VERSION}"
+    printf '\033[1;36m%s\033[0m\n\n' "╰─────────────────────────────╯"
+  fi
+
+  printf 'This script has not changed anything yet. Here is what it found:\n\n'
+  status_text "Version" "$BOOTSTRAP_VERSION"
+  status_text "User" "$user"
+  status_text "OS / arch" "$os / $arch"
+  status_text "Current shell" "$shell_name"
+  status_text "Home" "$HOME"
+  status_text "Homebrew" "$brew_state"
+  status_text "gum" "$gum_state"
+  status_text "zsh" "$zsh_state"
+  status_text "Starship" "$starship_state"
+  status_text "Oh My Zsh" "$omz_state"
+  status_text "Starship config" "$starship_config_state"
+  status_text ".zshrc" "$zshrc_state"
+
+  printf '\nPlanned changes after confirmation:\n'
+  if [[ "$DO_TOOLS" == 1 ]] && ! command_exists gum; then
+    status_text "gum" "offer early install for nicer prompts"
+  fi
+  if [[ "$DO_BREW" == 1 && "$os" == "macos" ]] && ! command_exists brew; then
+    status_text "Homebrew" "offer install"
+  elif [[ "$os" != "macos" ]] && ! command_exists brew; then
+    status_text "Homebrew" "skip on $os"
+  fi
+  if [[ "$DO_TOOLS" == 1 ]]; then
+    if command_exists brew; then
+      for pkg in "${BREW_CORE_PACKAGES[@]}"; do
+        status_text "brew:$pkg" "$(brew_package_status "$pkg")"
+      done
+    else
+      status_text "Core CLI tools" "need Homebrew; skipped unless brew becomes available"
+    fi
+  fi
+  if [[ "$DO_OPTIONAL" == 1 ]]; then
+    status_text "Optional tools" "will ask before installing"
+  else
+    status_text "Optional tools" "skipped by flag"
+  fi
+  if [[ "$DO_STARSHIP" == 1 ]]; then
+    status_text "Starship" "install if missing; configure ~/.config/starship.toml"
+  else
+    status_text "Starship" "skipped by flag"
+  fi
+  if [[ "$DO_OMZ" == 1 ]]; then
+    status_text "Oh My Zsh" "install if missing"
+  else
+    status_text "Oh My Zsh" "skipped by flag"
+  fi
+  status_text ".zshrc" "back up, disable OMZ theme, add/update managed block"
+  if [[ "$DO_CHSH" == 1 ]]; then
+    status_text "Login shell" "ask before changing to zsh if needed"
+  else
+    status_text "Login shell" "skipped by flag"
+  fi
+  if [[ "$DO_FONTS" == 1 && "$os" == "macos" ]]; then
+    for cask in "${MACOS_FONT_CASKS[@]}"; do
+      status_text "cask:$cask" "$(brew_cask_status "$cask")"
+    done
+  elif [[ "$DO_FONTS" == 1 ]]; then
+    status_text "Nerd Fonts" "skip; install fonts on terminal client machine"
+  else
+    status_text "Nerd Fonts" "skipped by flag"
+  fi
+
+  printf '\n'
+}
+
+confirm_intro() {
+  if [[ "$ASSUME_YES" == 1 ]]; then
+    log "Proceed with bootstrap? yes"
+    return 0
+  fi
+
+  if ask "Proceed with bootstrap?"; then
+    return 0
+  fi
+
+  warn "Cancelled before making changes"
+  exit 0
 }
 
 os_name() {
@@ -646,6 +818,9 @@ main() {
     esac
     shift
   done
+
+  print_intro
+  confirm_intro
 
   log "Bootstrap starting on $(os_name) / $(uname -m) as $(id -un)"
 
