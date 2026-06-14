@@ -28,10 +28,10 @@ The script is designed to be idempotent: running it repeatedly should not duplic
 
 ## Safer usage
 
-Inspect before running:
+Use a version tag for repeatable installs. `v1` will always mean the v1 installer:
 
 ```sh
-curl -fsSLO https://raw.githubusercontent.com/BarneyPowell/bootstrap/main/install.sh
+curl -fsSLO https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1/install.sh
 less install.sh
 bash install.sh --dry-run
 bash install.sh
@@ -39,14 +39,22 @@ bash install.sh
 
 ## One-liner usage
 
+Stable v1:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1/install.sh | bash
+```
+
+Latest from `main`:
+
 ```sh
 curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/main/install.sh | bash
 ```
 
-For non-interactive setup:
+For non-interactive stable v1 setup:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/main/install.sh | bash -s -- --yes
+curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1/install.sh | bash -s -- --yes
 ```
 
 ## Options
