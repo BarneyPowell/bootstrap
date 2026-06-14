@@ -59,6 +59,47 @@ For non-interactive stable v1.1 setup:
 curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1.1/install.sh | bash -s -- --yes
 ```
 
+## Versioning strategy
+
+This repo uses Git tags to provide stable installer URLs.
+
+Floating tags:
+
+- `v1` points to the latest stable `v1.x` release.
+- `v1.1` points to the latest stable `v1.1.x` release.
+
+Exact release tags:
+
+- `v1.1.0`, `v1.1.1`, etc. point to immutable patch releases.
+- Use exact patch tags when you want a fully pinned installer.
+- Use floating tags when you want compatible updates.
+
+Examples:
+
+```sh
+# Latest stable v1.x
+curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1/install.sh | bash
+
+# Latest stable v1.1.x
+curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1.1/install.sh | bash
+
+# Exact immutable v1.1.0
+curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1.1.0/install.sh | bash
+
+# Latest development version
+curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/main/install.sh | bash
+```
+
+Release process:
+
+1. Commit changes to `main`.
+2. Create an exact patch tag, e.g. `v1.1.1`.
+3. Move the floating minor tag, e.g. `v1.1`, to the same commit.
+4. Move the floating major tag, e.g. `v1`, to the same commit if it is the latest stable v1 release.
+5. Create a GitHub release for the new version.
+
+Moving floating tags requires a tag force-push by design; exact patch tags should not be moved after publication.
+
 ## Options
 
 ```text
