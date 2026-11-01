@@ -7,7 +7,7 @@ export const help = `git-ai 1.0.0 — staged Conventional Commits assistance
 Usage:
   git ai commit [--dry-run] [--provider apple|ollama|codex|claude]
                 [--model <id>] [--reasoning-effort <level>]
-  git ai doctor
+  git ai doctor [--plain]
   git ai ollama models [--global|--local]
   git ai codex models [--global|--local]
   git ai claude models [--global|--local]
@@ -20,6 +20,8 @@ disabled unless effective Git config ai.allowCloud is true.
 ollama models uses gum to save only ai.ollama.model (global by default).
 codex models uses gum to save only ai.codex.model (global by default).
 claude models uses gum to save only ai.claude.model (global by default).
+doctor draws a styled report with gum on a terminal; --plain (or NO_COLOR, or output
+that is not a terminal) prints one line per fact.
 Oversized context can escalate to Codex: ai.commit.contextFallback=ask|auto|never
 (default ask). Requires ai.allowCloud=true and an explicit ai.codex.model.
 `;
@@ -27,7 +29,11 @@ Oversized context can escalate to Codex: ai.commit.contextFallback=ask|auto|neve
 export function parseArgs(args: string[]): { command: 'help' | 'version' | 'doctor' | 'commit' | 'ollama-models' | 'codex-models' | 'claude-models'; options: Overrides; scope?: 'global' | 'local' } {
   if (args.length === 0 || (args.length === 1 && args[0] === '--help')) return { command: 'help', options: {} };
   if (args.length === 1 && args[0] === '--version') return { command: 'version', options: {} };
-  if (args.length === 1 && args[0] === 'doctor') return { command: 'doctor', options: {} };
+  if (args[0] === 'doctor') {
+    if (args.length === 1) return { command: 'doctor', options: {} };
+    if (args.length === 2 && args[1] === '--plain') return { command: 'doctor', options: { plain: true } };
+    throw new Failure('configuration-invalid', 'Usage: git ai doctor [--plain].');
+  }
   if (['ollama', 'codex', 'claude'].includes(args[0]) && args[1] === 'models') {
     if (args.length > 3 || (args[2] !== undefined && !['--global', '--local'].includes(args[2])))
       throw new Failure('configuration-invalid', `Usage: git ai ${args[0]} models [--global|--local].`);

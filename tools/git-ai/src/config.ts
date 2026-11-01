@@ -3,7 +3,7 @@ import { Failure } from './errors.ts';
 
 export const providers = ['apple', 'ollama', 'codex', 'claude'] as const;
 export type ProviderName = typeof providers[number];
-export type Overrides = { provider?: ProviderName; model?: string; reasoningEffort?: string; dryRun?: boolean };
+export type Overrides = { provider?: ProviderName; model?: string; reasoningEffort?: string; dryRun?: boolean; plain?: boolean };
 export type Config = {
   providers: ProviderName[]; allowCloud: boolean; timeoutSeconds: number;
   contextFallback: 'ask' | 'auto' | 'never'; pinned: boolean;

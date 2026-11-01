@@ -5,7 +5,8 @@ import { spawn } from 'node:child_process';
 import { Git } from './git.ts';
 import { cancelled } from './errors.ts';
 
-export async function commit(git: Git, tree: string, message: string): Promise<number> {
+// edit=false commits the reviewed message as-is; Git still runs hooks, signing and cleanup.
+export async function commit(git: Git, tree: string, message: string, edit = true): Promise<number> {
   const directory = await mkdtemp(join(tmpdir(), 'git-ai-message-'));
   try {
     const file = join(directory, 'message');
@@ -15,7 +16,7 @@ export async function commit(git: Git, tree: string, message: string): Promise<n
     cancelled(git.signal);
     // After handoff, Git owns signals, terminal interaction, hooks and recovery.
     return await new Promise((resolve, reject) => {
-      const child = spawn('git', ['commit', '--file', file, '--edit', '--cleanup=strip'], {
+      const child = spawn('git', ['commit', '--file', file, ...(edit ? ['--edit'] : []), '--cleanup=strip'], {
         cwd: git.cwd, stdio: 'inherit', shell: false,
       });
       child.on('error', reject);

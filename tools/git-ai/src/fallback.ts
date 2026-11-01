@@ -8,11 +8,22 @@ import { validateMessage } from './validation.ts';
 import { confirmContextFallback } from './context-fallback.ts';
 import type { ContextDecision } from './context-fallback.ts';
 
+export type Proposal = { message: string; provider: ProviderName; model: string; locality: 'local' | 'remote' };
+
 export async function generate(snapshot: Snapshot, config: Config, signal: AbortSignal,
   report: (line: string) => void,
   factory: (name: ProviderName, config: Config) => Adapter = createAdapter,
   validateCleanup: (message: string) => Promise<void> = async () => {},
   decide: ContextDecision = confirmContextFallback): Promise<string> {
+  return (await generateProposal(snapshot, config, signal, report, factory, validateCleanup, decide)).message;
+}
+
+// As generate, but also says which provider produced the message.
+export async function generateProposal(snapshot: Snapshot, config: Config, signal: AbortSignal,
+  report: (line: string) => void,
+  factory: (name: ProviderName, config: Config) => Adapter = createAdapter,
+  validateCleanup: (message: string) => Promise<void> = async () => {},
+  decide: ContextDecision = confirmContextFallback): Promise<Proposal> {
   const failures: string[] = [];
   const contextLimited = new Set<ProviderName>();
   const candidates = [...config.providers];
@@ -49,7 +60,7 @@ export async function generate(snapshot: Snapshot, config: Config, signal: Abort
         try {
           const message = validateMessage(output, config.subjectMaxLength);
           await validateCleanup(message);
-          return message;
+          return { message, provider: name, model: capabilities.model, locality: capabilities.locality };
         }
         catch (error) {
           if (!(error instanceof Failure) || error.kind !== 'invalid-output' || attempt === 1) throw error;

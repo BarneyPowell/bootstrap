@@ -1,11 +1,13 @@
 import { parseArgs, help } from './args.ts';
-import { loadConfig, providers } from './config.ts';
+import { loadConfig } from './config.ts';
+import type { Proposal } from './fallback.ts';
 import { Git } from './git.ts';
-import { generate } from './fallback.ts';
+import { generateProposal } from './fallback.ts';
 import { commit } from './commit.ts';
-import { createAdapter, executableVersion } from './providers.ts';
-import { Failure, diagnostic } from './errors.ts';
-import { platform, release } from 'node:os';
+import { collectDoctor, plainLines, renderDoctor } from './doctor.ts';
+import { pickerDependency } from './model-picker.ts';
+import { reviewMessage, chooseProvider } from './review.ts';
+import { Failure, cancelled, diagnostic } from './errors.ts';
 import { selectOllamaModel } from './ollama-models.ts';
 import { selectCodexModel } from './codex-models.ts';
 import { selectClaudeModel } from './claude-models.ts';
@@ -27,35 +29,51 @@ async function main(): Promise<number> {
   if (command === 'codex-models') return await selectCodexModel(config, scope ?? 'global', controller.signal, report);
   if (command === 'claude-models') return await selectClaudeModel(config, scope ?? 'global', controller.signal, report);
   if (command === 'doctor') {
-    report(`OS=${platform()} ${release()}; Node=${process.version}; cloud=${config.allowCloud ? 'allowed' : 'blocked'}`);
-    report(`provider order=${config.providers.join(' -> ')}; deadline=${config.timeoutSeconds}s per provider`);
-    report(`context fallback=${config.contextFallback}; ai.allowCloud remains the cloud gate`);
-    for (const [key, origin] of Object.entries(config.origins)) report(`${key} origin=${origin}`);
-    for (const name of providers) {
-      report(`${name}: model=${config.models[name] ?? (name === 'apple' ? 'system' : '(not configured)')}; reasoning=${config.efforts[name] ?? '(not set)'}`);
-      if (name === 'codex' || name === 'claude') {
-        try {
-          const version = await executableVersion(name, controller.signal);
-          report(`${name}: executable version=${version}; authentication and model access unverified`);
-        } catch { report(`${name}: executable version unavailable`); }
-      }
-      const timeout = AbortSignal.timeout(Math.min(config.timeoutSeconds * 1000, 3000));
-      try {
-        const info = await createAdapter(name, config).probe(AbortSignal.any([controller.signal, timeout]));
-        report(`${name}: ${info.locality}; ${info.detail}`);
-      } catch (error) {
-        if (controller.signal.aborted) throw new Failure('cancelled', 'Cancelled.');
-        report(`${name}: ${timeout.aborted ? 'timeout' : error instanceof Failure ? error.kind : 'unavailable'}: ${error instanceof Failure ? error.message : 'Probe failed; raw logs suppressed.'}`);
-      }
+    // Styled output needs a terminal and gum; anything else (or any gum failure) prints plain lines.
+    let styled = !options.plain && !!process.stderr.isTTY && !process.env.NO_COLOR;
+    if (styled) {
+      try { await pickerDependency('gum', controller.signal); } catch { cancelled(controller.signal); styled = false; }
     }
+    if (styled) process.stderr.write('\x1b[2mChecking providers…\x1b[0m');
+    const doctor = await collectDoctor(config, controller.signal);
+    if (styled) {
+      process.stderr.write('\r\x1b[2K');
+      try {
+        process.stderr.write(await renderDoctor(doctor, process.stderr.columns || 80, controller.signal) + '\n');
+        return 0;
+      } catch { cancelled(controller.signal); /* fall back to plain output */ }
+    }
+    for (const line of plainLines(doctor)) report(line);
     return 0;
   }
   const git = new Git(undefined, controller.signal);
   const snapshot = await git.collect(config.recentCount);
-  const message = await generate(snapshot, config, controller.signal, report, undefined, message => git.validateCleanup(message));
-  await git.assertTree(snapshot.tree);
-  if (options.dryRun) { process.stdout.write(message + '\n'); return 0; }
-  const code = await commit(git, snapshot.tree, message);
+  const propose = async (settings: typeof config): Promise<Proposal> => {
+    const proposal = await generateProposal(snapshot, settings, controller.signal, report, undefined, message => git.validateCleanup(message));
+    await git.assertTree(snapshot.tree);
+    return proposal;
+  };
+  let proposal = await propose(config);
+  if (options.dryRun) { process.stdout.write(proposal.message + '\n'); return 0; }
+  let decision = await reviewMessage(proposal, controller.signal, report);
+  while (decision === 'retry') {
+    const provider = await chooseProvider(config, proposal.provider, controller.signal, report);
+    if (provider) {
+      try {
+        // Same staged snapshot, chosen provider pinned (no fallback); cloud policy still applies.
+        proposal = await propose(await loadConfig({ provider }, undefined, controller.signal));
+      } catch (error) {
+        if (!(error instanceof Failure) || ['cancelled', 'git-error'].includes(error.kind)) throw error;
+        report(`${provider} could not produce a message (${error.kind}); keeping the previous proposal.`);
+      }
+    }
+    decision = await reviewMessage(proposal, controller.signal, report);
+  }
+  if (decision === 'reject' || decision === 'cancel') {
+    report(decision === 'reject' ? 'Proposal rejected; nothing was committed.' : 'Cancelled; nothing was committed.');
+    return decision === 'reject' ? 1 : 130;
+  }
+  const code = await commit(git, snapshot.tree, proposal.message, decision === 'edit');
   if (code !== 0) {
     try {
       const path = await git.text(['rev-parse', '--path-format=absolute', '--git-path', 'COMMIT_EDITMSG']);

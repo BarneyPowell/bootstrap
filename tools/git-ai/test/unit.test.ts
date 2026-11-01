@@ -17,6 +17,8 @@ import { modelChoices } from '../src/ollama-models.ts';
 import { codexModels } from '../src/codex-models.ts';
 import { claudeModels, claudeModelRequest } from '../src/claude-models.ts';
 import { buildModelChoices } from '../src/model-picker.ts';
+import { plainLines, nextSteps, wrap } from '../src/doctor.ts';
+import type { DoctorReport } from '../src/doctor.ts';
 
 const signal = () => new AbortController().signal;
 const snapshot: Snapshot = { tree: 'tree', history: ['chore: historical example'], changes: [{
@@ -549,4 +551,37 @@ test('provider generation and repair share one deadline', async () => {
     },
   })), /deadline/);
   assert.equal(calls, 1);
+});
+
+test('doctor accepts only --plain and the plain report keeps the established one-fact-per-line format', () => {
+  assert.deepEqual(parseArgs(['doctor']), { command: 'doctor', options: {} });
+  assert.deepEqual(parseArgs(['doctor', '--plain']), { command: 'doctor', options: { plain: true } });
+  for (const bad of [['doctor', '--json'], ['doctor', '--plain', '--plain'], ['doctor', 'extra']]) assert.throws(() => parseArgs(bad), /Usage: git ai doctor/);
+  const report: DoctorReport = { os: 'testos 1', node: 'v0', cloud: false, order: ['apple', 'claude'], timeoutSeconds: 30, contextFallback: 'ask', recentCount: 8,
+    origins: [['ai.allowCloud', 'file:/x/.gitconfig']], entries: [
+      { name: 'apple', model: 'system', effort: '(not set)', status: 'ready', locality: 'local', label: '', detail: 'fm ok' },
+      { name: 'claude', model: 'm', effort: 'low', status: 'blocked', label: 'privacy-blocked', detail: 'needs cloud', version: '2.1 (Claude Code)' },
+      { name: 'codex', model: '(not configured)', effort: '(not set)', status: 'not-configured', label: 'model-not-configured', detail: 'set a model', version: null },
+      { name: 'ollama', model: 'x', effort: '(not set)', status: 'unavailable', label: 'timeout', detail: 'slow' }] };
+  assert.deepEqual(plainLines(report), [
+    'OS=testos 1; Node=v0; cloud=blocked', 'provider order=apple -> claude; deadline=30s per provider',
+    'context fallback=ask; ai.allowCloud remains the cloud gate', 'ai.allowCloud origin=file:/x/.gitconfig',
+    'apple: model=system; reasoning=(not set)', 'apple: local; fm ok',
+    'claude: model=m; reasoning=low', 'claude: executable version=2.1 (Claude Code); authentication and model access unverified', 'claude: privacy-blocked: needs cloud',
+    'codex: model=(not configured); reasoning=(not set)', 'codex: executable version unavailable', 'codex: model-not-configured: set a model',
+    'ollama: model=x; reasoning=(not set)', 'ollama: timeout: slow']);
+  const steps = nextSteps(report);
+  assert.equal(steps.length, 3);
+  assert.match(steps[0], /^claude: .*ai\.allowCloud true/);
+  assert.match(steps[1], /^codex: .*git ai codex models/);
+  assert.match(steps[2], /^ollama: timed out/);
+  assert.deepEqual(nextSteps({ ...report, entries: [report.entries[0]] }), []);
+});
+
+test('doctor wrapping keeps a hanging indent and never exceeds the width', () => {
+  assert.equal(wrap('aaa bbb ccc', 9, '• ', '  '), '• aaa bbb\n  ccc');
+  const long = wrap('word '.repeat(40).trim(), 30, '• ', '  ');
+  for (const line of long.split('\n')) assert.ok([...line].length <= 30, line);
+  assert.ok(long.split('\n').slice(1).every(line => line.startsWith('  ')));
+  assert.equal(wrap('', 20, '• ', '  '), '• ');
 });

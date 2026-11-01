@@ -3,10 +3,24 @@
 Welcome!
 
 `git ai commit` proposes one Conventional Commits message for the **staged**
-changes, then opens Git's normal commit editor. Saving and exiting accepts the
-prefilled message, including when you leave it unchanged. To abort, delete the
-whole message and save, or exit the editor with an error. Merely closing an
-editor successfully without editing accepts the proposal.
+changes, shows it, and asks with **gum** what to do:
+
+- **Accept** commits the message exactly as shown, without opening an editor.
+- **Try another provider…** lists the providers that are ready right now (the
+  same checks as `git ai doctor`), other than the one that wrote the proposal,
+  each marked local or remote. Choosing one regenerates from the same staged
+  snapshot with that provider pinned, then shows the new proposal for review.
+  Blocked or unconfigured providers are never offered, so `ai.allowCloud` still
+  decides whether cloud providers appear. If regeneration fails, or you pick
+  **Back**, the previous proposal is kept; Ctrl+C cancels the commit.
+- **Edit** opens Git's normal commit editor prefilled with the proposal. Saving
+  and exiting commits it, including when you leave it unchanged; to abort,
+  delete the whole message and save, or exit the editor with an error.
+- **Reject** (or Esc) commits nothing and exits 1; Ctrl+C exits 130.
+
+Either way Git's hooks, signing and cleanup run as for any commit. If gum is
+missing or its prompt fails, git-ai says so and falls back to the editor, where
+you can still abort. Nothing is regenerated after a rejection.
 
 ## Build and install
 
@@ -48,6 +62,7 @@ selected model setting.
 git ai --help
 git ai --version
 git ai doctor
+git ai doctor --plain
 git ai ollama models
 git ai ollama models --local
 git ai codex models
@@ -65,6 +80,22 @@ git ai commit --provider claude --model '<supported-lightweight-model-id>'
 Angle-bracketed identifiers are **placeholders**, not model names to copy.
 Provider pinning disables fallback. Model/effort overrides require a provider.
 Codex and Claude use the constrained CLI integrations described below. No CLI default model is inherited or guessed.
+
+### Reading `git ai doctor`
+
+On a terminal with **gum** installed, `git ai doctor` draws a styled report on
+stderr: a banner with the overall verdict, a policy table (cloud gate, provider
+order, deadline, context fallback), a provider table with colour-coded status
+(`● ready`, `◐ blocked` by policy, `✗ unavailable`, `○ not configured`), one
+detail card per provider (with the CLI version for Codex and Claude), the Git
+settings in effect and where each came from, and a **Next steps** panel with the
+concrete command to run for each problem found. Providers are probed
+concurrently, and layout adapts to the terminal width (60–100 columns).
+
+Pass `--plain`, set `NO_COLOR`, or redirect stderr to get the original
+one-fact-per-line output instead; it is also used automatically if gum is missing
+or fails. Doctor sends no repository content in either form, and the styled
+report passes gum only text this tool produced (sanitised, with no templates).
 
 An ordinary commit needs a terminal before generation begins. Dry-run needs no
 terminal, prints only the message to stdout, and never runs an editor or commit.
