@@ -68,7 +68,7 @@ export async function listClaudeModels(config: Config, signal: AbortSignal, repo
     { cwd: directory, env, signal, input: claudeModelRequest, timeoutMs: config.timeoutSeconds * 1000, limit: 2_000_000 });
     if (result.code !== 0) throw new Failure('unavailable', 'Claude model listing failed. Check Claude Code version and authentication; raw logs suppressed.');
     const models = claudeModels(result.stdout);
-    report('Claude model choices are CLI metadata; account entitlement is not verified by listing. Claude commit generation is still unavailable in this version.');
+    report('Claude model choices are CLI metadata; account entitlement is not verified by listing.');
     return models;
   } finally { await rm(directory, { recursive: true, force: true }); }
 }

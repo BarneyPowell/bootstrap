@@ -357,35 +357,111 @@ test('unconfigured providers give actionable errors', async () => {
   await assert.rejects(createAdapter('ollama', config()).probe(signal()), (e: any) => e.kind === 'model-not-configured');
 });
 
-test('disabled Claude adapter only probes its version in an isolated directory', async t => {
+const fakeClaudeSource = `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+const mode = process.env.CLAUDE_TEST_MODE || 'ok';
+if (args[0] === '--help') {
+  const flags = ['--print', '--output-format', '--include-hook-events', '--no-session-persistence', '--safe-mode', '--restricted', '--tools',
+    '--disable-slash-commands', '--strict-mcp-config', '--mcp-config', '--setting-sources', '--settings', '--system-prompt',
+    '--permission-prompts', '--no-chrome', '--model', '--effort'];
+  console.log(flags.filter(flag => mode !== 'oldcli' || flag !== '--safe-mode').join('\\n'));
+  process.exit(0);
+}
+let input = '';
+process.stdin.on('data', c => input += c);
+process.stdin.on('end', () => {
+  fs.appendFileSync(process.env.CLAUDE_TEST_LOG, JSON.stringify({ args, input, cwd: process.cwd(),
+    hasApiKey: 'ANTHROPIC_API_KEY' in process.env, gitDir: process.env.GIT_DIR }) + '\\n');
+  const emit = event => console.log(JSON.stringify(event));
+  const init = { type: 'system', subtype: 'init', tools: [], mcp_servers: [], skills: [], slash_commands: [], plugins: [{ path: 'builtin' }], apiKeySource: 'none' };
+  const result = { type: 'result', subtype: 'success', is_error: false, result: 'fix: update behavior', permission_denials: [] };
+  if (mode === 'badjson') { console.log('PRIVATE NOT JSON'); return; }
+  if (mode === 'tools') init.tools = ['Bash'];
+  if (mode === 'mcp') init.mcp_servers = [{ name: 'x' }];
+  if (mode === 'plugin') init.plugins = [{ path: '/home/user/plugin' }];
+  if (mode === 'apikey') init.apiKeySource = 'ANTHROPIC_API_KEY';
+  if (mode !== 'noinit') emit(init);
+  if (mode === 'hook') emit({ type: 'system', subtype: 'hook_started' });
+  if (mode === 'user') emit({ type: 'user', message: { content: [{ type: 'tool_result' }] } });
+  emit({ type: 'rate_limit_event', rate_limit_info: {} });
+  emit({ type: 'assistant', message: { content: [{ type: 'thinking', thinking: 'ok' }, mode === 'tooluse' ? { type: 'tool_use', name: 'Bash' } : mode === 'weird' ? { type: 'surprise' } : { type: 'text', text: 'fix: update behavior' }] } });
+  if (mode === 'denied') result.permission_denials = [{ tool_name: 'Bash' }];
+  if (mode === 'auth') Object.assign(result, { is_error: true, result: 'PRIVATE Not logged in · Please run /login' });
+  if (mode === 'context') Object.assign(result, { is_error: true, result: 'PRIVATE Prompt is too long' });
+  if (mode === 'model') Object.assign(result, { is_error: true, result: 'PRIVATE There is an issue with the selected model' });
+  if (mode === 'other') Object.assign(result, { is_error: true, result: 'PRIVATE boom' });
+  emit(result);
+  if (result.is_error) { console.error('PRIVATE STDERR'); process.exitCode = 1; }
+});
+`;
+
+async function claudeFixture(t: any) {
   const directory = await fixture(t);
   const bin = join(directory, 'fake-bin');
   await mkdir(bin);
-  const log = join(directory, 'probe-log');
-  for (const name of ['claude'])
-    await writeFile(join(bin, name), '#!/bin/sh\nprintf "%s|%s\\n" "$PWD" "$*" >> "$PROBE_LOG"\nprintf "fake-cli 1.0\\n"\n', { mode: 0o700 });
-  const oldPath = process.env.PATH;
-  const oldLog = process.env.PROBE_LOG;
-  process.env.PATH = `${bin}:${oldPath}`;
-  process.env.PROBE_LOG = log;
-  try {
-    for (const name of ['claude'] as const) {
-      const adapter = createAdapter(name, config({ allowCloud: true, models: { [name]: 'explicit-model' }, efforts: { [name]: 'low' } }));
-      await assert.rejects(adapter.probe(signal()), (e: any) => e.kind === 'unavailable' && /disabled/.test(e.message));
-      await assert.rejects(adapter.generate('SECRET-PAYLOAD', signal()), /disabled/);
-    }
-    const lines = (await readFile(log, 'utf8')).trim().split('\n');
-    assert.equal(lines.length, 1);
-    for (const line of lines) {
-      const [cwd, args] = line.split('|');
-      assert.ok(!cwd.startsWith(directory));
-      assert.equal(args, '--version');
-      await assert.rejects(access(cwd));
-    }
-  } finally {
-    process.env.PATH = oldPath;
-    if (oldLog === undefined) delete process.env.PROBE_LOG; else process.env.PROBE_LOG = oldLog;
+  await writeFile(join(bin, 'claude'), fakeClaudeSource, { mode: 0o700 });
+  const saved = { path: process.env.PATH, key: process.env.ANTHROPIC_API_KEY, gitDir: process.env.GIT_DIR };
+  process.env.PATH = `${bin}:${saved.path}`;
+  process.env.CLAUDE_TEST_LOG = join(directory, 'claude-log');
+  process.env.ANTHROPIC_API_KEY = 'SECRET-KEY';
+  process.env.GIT_DIR = '/nonexistent/git-dir';
+  t.after(() => {
+    process.env.PATH = saved.path;
+    for (const [name, value] of [['ANTHROPIC_API_KEY', saved.key], ['GIT_DIR', saved.gitDir]] as const)
+      if (value === undefined) delete process.env[name]; else process.env[name] = value;
+    delete process.env.CLAUDE_TEST_LOG;
+    delete process.env.CLAUDE_TEST_MODE;
+  });
+  return { directory, log: process.env.CLAUDE_TEST_LOG };
+}
+
+test('Claude adapter probes required controls without sending content and generates under the requested constraints', async t => {
+  const { directory, log } = await claudeFixture(t);
+  const adapter = createAdapter('claude', config({ allowCloud: true, models: { claude: 'explicit-model' }, efforts: { claude: 'low' } }));
+  const capabilities = await adapter.probe(signal());
+  assert.equal(capabilities.locality, 'remote');
+  await assert.rejects(readFile(log, 'utf8'), { code: 'ENOENT' });
+  assert.equal(await adapter.generate('prepared input only', signal()), 'fix: update behavior');
+  const record = JSON.parse((await readFile(log, 'utf8')).trim());
+  const joined = record.args.join(' ');
+  for (const expected of ['--print', '--safe-mode', '--restricted', '--strict-mcp-config', '--no-session-persistence', '--include-hook-events',
+    '--disable-slash-commands', '--no-chrome', '--permission-prompts none', '--model=explicit-model', '--effort=low', '--setting-sources  --settings {"disableAllHooks":true}'])
+    assert.ok(joined.includes(expected), expected);
+  assert.equal(record.args[record.args.indexOf('--tools') + 1], '');
+  assert.equal(record.args[record.args.indexOf('--system-prompt') + 1], instructions);
+  assert.equal(record.input, 'prepared input only');
+  assert.equal(record.hasApiKey, false);
+  assert.equal(record.gitDir, undefined);
+  assert.ok(!record.cwd.startsWith(directory));
+  await assert.rejects(access(record.cwd));
+  // No effort configured: the flag is not sent.
+  const plain = createAdapter('claude', config({ allowCloud: true, models: { claude: 'explicit-model' } }));
+  await plain.generate('x', signal());
+  assert.ok(!JSON.parse((await readFile(log, 'utf8')).trim().split('\n').at(-1)!).args.join(' ').includes('--effort'));
+  // Policy and model are enforced before any CLI runs.
+  await assert.rejects(createAdapter('claude', config({ models: { claude: 'm' } })).generate('x', signal()), (e: any) => e.kind === 'privacy-blocked');
+  await assert.rejects(createAdapter('claude', config({ allowCloud: true })).generate('x', signal()), (e: any) => e.kind === 'model-not-configured');
+  process.env.CLAUDE_TEST_MODE = 'oldcli';
+  await assert.rejects(createAdapter('claude', config({ allowCloud: true, models: { claude: 'm' } })).probe(signal()), /lacks required controls/);
+});
+
+test('Claude adapter refuses results whose session, events or credentials violate the requested constraints', async t => {
+  const { log } = await claudeFixture(t);
+  for (const [mode, kind, pattern] of [
+    ['tools', 'unavailable', /constraints \(tools\)/], ['mcp', 'unavailable', /MCP servers/], ['plugin', 'unavailable', /plugins/],
+    ['apikey', 'unavailable', /API-key or token source/], ['noinit', 'unavailable', /did not report its session constraints/],
+    ['hook', 'unavailable', /hook event/], ['user', 'unavailable', /tool exchange/], ['tooluse', 'unavailable', /tool_use action/],
+    ['weird', 'unavailable', /unsupported content type \(surprise\)/], ['denied', 'unavailable', /denied permissions/],
+    ['badjson', 'transport/service-error', /invalid JSON/],
+    ['auth', 'auth-required', /claude login/], ['context', 'context-too-large', /too large/], ['model', 'configuration-invalid', /ai\.claude\.model/],
+    ['other', 'transport/service-error', /raw logs suppressed/],
+  ] as const) {
+    process.env.CLAUDE_TEST_MODE = mode;
+    const adapter = createAdapter('claude', config({ allowCloud: true, models: { claude: 'm' } }));
+    await assert.rejects(adapter.generate('x', signal()), (e: any) => e.kind === kind && pattern.test(e.message) && !/PRIVATE|SECRET/.test(e.message), mode);
   }
+  assert.ok((await readFile(log, 'utf8')).trim().split('\n').length >= 15);
 });
 
 test('Apple fm adapter pins system, counts stdin tokens, separates stdout, and cleans private directories', async t => {

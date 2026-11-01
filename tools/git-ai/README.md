@@ -64,8 +64,7 @@ git ai commit --provider claude --model '<supported-lightweight-model-id>'
 
 Angle-bracketed identifiers are **placeholders**, not model names to copy.
 Provider pinning disables fallback. Model/effort overrides require a provider.
-Claude currently reports the unavailable state below. Codex uses the constrained
-CLI integration described below. No CLI default model is inherited or guessed.
+Codex and Claude use the constrained CLI integrations described below. No CLI default model is inherited or guessed.
 
 An ordinary commit needs a terminal before generation begins. Dry-run needs no
 terminal, prints only the message to stdout, and never runs an editor or commit.
@@ -152,9 +151,8 @@ Entries are CLI choices, not proof of account entitlement. This was verified
 with Claude Code 2.1.308; older versions lacking these flags/protocol fields may
 be unavailable.
 
-**Selecting a Claude model does not enable Claude commit generation.** That
-adapter still reports unavailable for the reasons below; this command manages
-the saved preference independently.
+**Selecting a Claude model does not authorise remote generation.** You still need
+`ai.allowCloud=true`; this command manages the saved preference independently.
 
 ### Context too large: offer Codex
 
@@ -219,12 +217,11 @@ precedence. Values are validated before any provider request; Git parses boolean
 | `ai.ollama.keepAlive` | `0` (unload after each request); `-1` (keep loaded), seconds, or a duration such as `10m` |
 | `ai.codex.model` | No default; explicit identifier supported by your ChatGPT Codex CLI login |
 | `ai.codex.reasoningEffort` | Unset; `none`, `minimal`, `low`, `medium`, `high`, `xhigh`; must also be supported by the chosen model |
-| `ai.claude.model` | No default; explicit identifier; adapter currently unavailable |
-| `ai.claude.reasoningEffort` | Unset; CLI vocabulary `low`, `medium`, `high`, `xhigh`, `max`; adapter unavailable |
+| `ai.claude.model` | No default; explicit identifier supported by your Claude Code CLI login |
+| `ai.claude.reasoningEffort` | Unset; CLI vocabulary `low`, `medium`, `high`, `xhigh`, `max`; sent as `--effort` |
 
-Codex receives the configured reasoning effort explicitly; a rejected setting
-fails rather than being silently discarded. Claude effort settings remain
-unavailable with that adapter. Model entitlement is not inferred from CLI help.
+Codex and Claude receive the configured reasoning effort explicitly; a rejected
+setting fails rather than being silently discarded. Model entitlement is not inferred from CLI help.
 Apple/Ollama reasoning settings are rejected. Auto mode skips unconfigured
 providers with reasons; pinning an unconfigured provider is a configuration error.
 
@@ -253,16 +250,31 @@ versions, and lightweight availability without sending repository contents.
 | Apple | Built-in `fm`: availability via `models`, token counting via `count-tokens --quiet`, generation via `respond --model system --use-case general --guardrails default --no-stream --greedy`. Prompt is sent on stdin; no tools, transcript, session resumption, server, or cloud model. |
 | Ollama | Documented HTTP `/api/tags`, `/api/show`, `/api/generate`; exact installed model, reported context size, raw text generation, no tools, downloads, or service startup. |
 | Codex | `codex exec -` with explicit model/effort, private temporary cwd, read-only sandbox, `approval_policy=never`, ignored user config, ephemeral sessions, fixed instructions, disabled command/hook/app/plugin/multi-agent/memory features, empty MCP config and disabled web search. Final text is read from `--output-last-message`; protocol logs remain private. Uses existing ChatGPT authentication and refuses paid API credential substitution. |
-| Claude | **Unavailable**. Inspected Claude Code `2.1.308` `--help`: `-p`, `--tools ""`, `--strict-mcp-config`, and `--safe-mode` exist, but official documentation says managed hooks still apply. This v1 cannot guarantee their exclusion and refuses generation. |
+| Claude | `claude --print` with explicit model/effort, private temporary cwd, no built-in tools (`--tools ""`), `--safe-mode --restricted`, empty MCP config, user/project/local settings ignored, `disableAllHooks`, no slash commands or Chrome, no session persistence, permission prompts denied, and a fixed system prompt. Prepared data goes on stdin; the final text is read from the `result` event of `stream-json` output. Uses existing CLI login and refuses `ANTHROPIC_*`/Bedrock/Vertex/Foundry credential substitution. |
 
 CLI probes run in private temporary directories without repository data. Codex
 checks `exec --help` and `features list` for required controls before generation;
 older/incompatible CLIs remain unavailable. Inspected installed version: 0.166.0.
-Claude generation only probes its version and remains unavailable; its separate
-model selector performs the metadata-only initialize handshake above.
+Claude checks `--help` for the required controls (no prompt is sent) and
+re-checks the session it actually built on every run: its `init` event must report
+no tools, MCP servers, skills or slash commands, only built-in plugins, and the
+CLI login as the credential source (`apiKeySource` of `none`). Its separate model
+selector performs the metadata-only initialize handshake above.
 Authentication and model
 entitlement cannot be established from these probes alone; generation errors
 provide setup guidance without printing raw provider logs.
+
+The Claude path accepts the same trade-off. It does **not** prove that managed
+(policy) settings, which `--safe-mode` and `--restricted` deliberately leave in
+force, cannot run hooks or other configured behaviour, and Claude Code offers no
+command-line switch that removes them. `--include-hook-events` makes hook activity
+visible, and any hook event, tool exchange, non-text content block, denied
+permission, or session that does not match the constraints above refuses the
+result; as with Codex, detecting an event cannot undo something that already
+ran. Passive thinking blocks and rate-limit notices are allowed. An `is_error`
+result, a non-zero exit, or a missing `result` fails with setup guidance and raw
+logs suppressed. Claude is part of the configured provider chain, not of the
+context-size escalation, which remains Codex-only.
 
 The Codex path implements the subsequently agreed practical CLI constraints,
 relaxing the original spec's requirement for an absolute text-only guarantee.
@@ -372,7 +384,9 @@ Codex picker tests use a fake CLI catalog to verify visible-model filtering,
 offline/refreshed listing arguments, scope, unchanged policies and effort, error
 redaction, deadlines and cleanup. The Ollama/Codex pickers share the same UI and
 Git-setting code.
-Claude picker tests use fake initialization metadata and cover resolved IDs,
+Claude adapter tests drive a fake CLI through success, argument and environment
+checks (credentials and `GIT_*` stripped, private cwd cleaned), and every
+refusal and failure path above. Claude picker tests use fake initialization metadata and cover resolved IDs,
 aliases, context variants, global/local scope, cancellation, rejected permissions
 and generation turns, invalid metadata, failures, timeouts and resource cleanup.
 Context fallback tests exercise gum accept/decline/cancel, unattended automatic

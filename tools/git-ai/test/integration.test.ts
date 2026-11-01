@@ -640,7 +640,7 @@ test('Claude picker marks a saved alias and saves only a resolved global model v
   assert.match(saved, /allowCloud = false/);
   assert.match(saved, /reasoningEffort = low/);
   assert.match(result.stdout, /reasoningEffort was left unchanged/);
-  assert.match(result.stdout, /commit generation is still unavailable/);
+  assert.doesNotMatch(result.stdout, /still unavailable/);
   assert.match(JSON.parse(await readFile(log, 'utf8')).args.join(' '), /claude-test-fast.*current default/);
   const metadata = JSON.parse(await readFile(env.FAKE_CLAUDE_LOG!, 'utf8'));
   assert.equal(JSON.parse(metadata.input).type, 'control_request');

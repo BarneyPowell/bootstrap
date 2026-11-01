@@ -6,6 +6,7 @@ import { run } from './process.ts';
 import type { Config, ProviderName } from './config.ts';
 import { Failure, cancelled } from './errors.ts';
 import { createCodexAdapter } from './codex.ts';
+import { createClaudeAdapter } from './claude.ts';
 
 export type Capabilities = { model: string; locality: 'local' | 'remote'; inputBytes: number; detail: string };
 export interface Adapter {
@@ -88,6 +89,7 @@ export async function httpJSON(endpoint: string, path: string, body: unknown, si
 
 export function createAdapter(name: ProviderName, config: Config): Adapter {
   if (name === 'codex') return createCodexAdapter(config);
+  if (name === 'claude') return createClaudeAdapter(config);
   const model = config.models[name] ?? (name === 'apple' ? 'system' : '');
   let context = 0;
   let locality: Capabilities['locality'] = name === 'apple' || (name === 'ollama' && isLoopback(config.endpoint)) ? 'local' : 'remote';
@@ -115,10 +117,7 @@ export function createAdapter(name: ProviderName, config: Config): Adapter {
         context = Math.min(context, config.maxContext.ollama);
         return { model, locality, inputBytes: context - 1024, detail: `Model present; using ${context} tokens of reported context, with conservative byte budgeting; inference not probed.` };
       }
-      // These CLIs are agents. Do not send a prompt until all side effects can be
-      // disabled through a supported interface, including policy-level hooks.
-      await executableVersion(name, signal);
-      throw new Failure('unavailable', 'Claude Code adapter disabled: --tools "" and --safe-mode still permit policy-configured hooks. No content sent; authentication/model access unverified.');
+      throw new Failure('unavailable', `${name} provider is not handled by this adapter.`);
     },
     async generate(prompt, signal) {
       if (name === 'apple') {
