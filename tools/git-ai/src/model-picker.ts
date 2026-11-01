@@ -2,8 +2,10 @@ import type { Config } from './config.ts';
 import { Failure, cancelled, diagnostic } from './errors.ts';
 import { run } from './process.ts';
 
-export type PickerModel = { name: string; remote: boolean; efforts?: string[] };
-type PickerProvider = 'ollama' | 'codex';
+export type PickerModel = { name: string; remote: boolean; efforts?: string[]; aliases?: string[] };
+type PickerProvider = 'ollama' | 'codex' | 'claude';
+
+const matchesCurrent = (model: PickerModel, current?: string) => model.name === current || (current !== undefined && !!model.aliases?.includes(current));
 
 export function validModelName(name: unknown): name is string {
   return typeof name === 'string' && !!name.trim() && name === name.trim() && name.length <= 200 &&
@@ -14,13 +16,16 @@ export function buildModelChoices(models: PickerModel[], current?: string) {
   const unique = new Map<string, PickerModel>();
   for (const model of models) {
     if (!validModelName(model.name)) throw new Failure('transport/service-error', 'Provider returned an invalid model identifier; no setting was changed.');
-    unique.set(model.name, { ...model, remote: model.remote || (unique.get(model.name)?.remote ?? false) });
+    const previous = unique.get(model.name);
+    unique.set(model.name, { ...model, remote: model.remote || (previous?.remote ?? false),
+      ...(model.aliases || previous?.aliases ? { aliases: [...new Set([...(previous?.aliases ?? []), ...(model.aliases ?? [])])] } : {}),
+    });
   }
-  return [...unique.values()].sort((a, b) => a.name === current ? -1 : b.name === current ? 1 : a.name.localeCompare(b.name))
-    .map((model, i) => ({ model, label: `${i + 1}. ${model.name}${model.name === current ? '  (current default)' : ''}${model.remote ? '  [remote model]' : ''}` }));
+  return [...unique.values()].sort((a, b) => matchesCurrent(a, current) ? -1 : matchesCurrent(b, current) ? 1 : a.name.localeCompare(b.name))
+    .map((model, i) => ({ model, label: `${i + 1}. ${model.name}${matchesCurrent(model, current) ? '  (current default)' : ''}${model.remote ? '  [remote model]' : ''}` }));
 }
 
-export async function pickerDependency(name: 'gum' | 'ollama' | 'codex', signal: AbortSignal): Promise<void> {
+export async function pickerDependency(name: 'gum' | 'ollama' | 'codex' | 'claude', signal: AbortSignal): Promise<void> {
   try {
     const result = await run(name, ['--version'], { signal, timeoutMs: 3000 });
     if (result.code === 0) return;
@@ -30,7 +35,8 @@ export async function pickerDependency(name: 'gum' | 'ollama' | 'codex', signal:
   }
   const guidance = name === 'gum' ? 'gum is unavailable. Run make ensure-gum from the bootstrap clone, then retry.'
     : name === 'ollama' ? 'Ollama CLI is unavailable. Install Ollama yourself, start its service, then retry.'
-    : 'Codex CLI is unavailable. Install Codex separately, then retry.';
+    : name === 'codex' ? 'Codex CLI is unavailable. Install Codex separately, then retry.'
+    : 'Claude CLI is unavailable. Install Claude Code separately, then retry.';
   throw new Failure('not-installed', guidance);
 }
 
@@ -42,15 +48,15 @@ export async function selectModel(config: Config, provider: PickerProvider, scop
     throw new Failure('configuration-invalid', '--local requires a Git repository; omit it to save the global default.');
   await pickerDependency('gum', signal);
   const key = `ai.${provider}.model`;
-  const title = provider === 'codex' ? 'Codex' : 'Ollama';
+  const title = { codex: 'Codex', ollama: 'Ollama', claude: 'Claude' }[provider];
   const saved = await run('git', ['config', `--${scope}`, '--includes', '--get', key], { signal });
   if (![0, 1].includes(saved.code)) throw new Failure('configuration-invalid', `Cannot read the ${scope} ${key} setting.`);
   const current = saved.code === 0 ? saved.stdout.replace(/\n$/, '') : undefined;
   const choices = buildModelChoices(await load(), current);
   if (!choices.length) throw new Failure('unavailable', provider === 'ollama'
     ? 'Ollama has no installed models. Install a model yourself, then retry; no setting was changed.'
-    : 'Codex returned no visible models. Check its CLI catalog, version and authentication; no setting was changed.');
-  const present = choices.some(choice => choice.model.name === current);
+    : `${title} returned no visible models. Check its CLI catalog, version and authentication; no setting was changed.`);
+  const present = choices.some(choice => matchesCurrent(choice.model, current));
   const header = [`Default ${title} model (${scope})`, `Current ${scope}: ${diagnostic(current ?? '(not set)')}${current && !present ? ' — not available on this service/catalog' : ''}`];
   if (scope === 'global' && config.models[provider] !== current)
     header.push(`Effective here: ${diagnostic(config.models[provider] ?? '(not set)')} — repository/environment overrides may take precedence`);

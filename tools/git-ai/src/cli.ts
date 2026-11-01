@@ -8,6 +8,7 @@ import { Failure, diagnostic } from './errors.ts';
 import { platform, release } from 'node:os';
 import { selectOllamaModel } from './ollama-models.ts';
 import { selectCodexModel } from './codex-models.ts';
+import { selectClaudeModel } from './claude-models.ts';
 
 const controller = new AbortController();
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => controller.abort(signal));
@@ -24,6 +25,7 @@ async function main(): Promise<number> {
   const config = await loadConfig(options, undefined, controller.signal);
   if (command === 'ollama-models') return await selectOllamaModel(config, scope ?? 'global', controller.signal, report);
   if (command === 'codex-models') return await selectCodexModel(config, scope ?? 'global', controller.signal, report);
+  if (command === 'claude-models') return await selectClaudeModel(config, scope ?? 'global', controller.signal, report);
   if (command === 'doctor') {
     report(`OS=${platform()} ${release()}; Node=${process.version}; cloud=${config.allowCloud ? 'allowed' : 'blocked'}`);
     report(`provider order=${config.providers.join(' -> ')}; deadline=${config.timeoutSeconds}s per provider`);

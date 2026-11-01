@@ -14,7 +14,8 @@ for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_COMMON_DIR
 export const config = (overrides: Partial<Config> = {}): Config => ({
   providers: ['apple', 'ollama', 'codex', 'claude'], allowCloud: false, timeoutSeconds: 2,
   contextFallback: 'ask', pinned: false,
-  recentCount: 8, subjectMaxLength: 72, endpoint: 'http://127.0.0.1:11434', models: {}, efforts: {}, origins: {}, ...overrides,
+  recentCount: 8, subjectMaxLength: 72, endpoint: 'http://127.0.0.1:11434',
+  maxContext: { apple: 4096, ollama: 8192 }, ollamaKeepAlive: '0', models: {}, efforts: {}, origins: {}, ...overrides,
 });
 
 export function git(cwd: string, ...args: string[]): string {
@@ -48,6 +49,7 @@ if (args[0] === '--version') { console.log('codex-cli 0.166.0'); process.exit(0)
 if (args.includes('--help')) {
   console.log('--ignore-user-config --ephemeral --skip-git-repo-check --output-last-message --sandbox --json'); process.exit(0);
 }
+
 if (args[0] === 'features') {
   for (const feature of ['shell_tool','hooks','apps','plugins','multi_agent','memories','shell_snapshot','view_image']) console.log(feature + ' stable true');
   process.exit(0);
@@ -97,4 +99,37 @@ process.stdin.on('end', () => {
 });
 `, { mode: 0o700 });
   return { PATH: `${bin}:${process.env.PATH}`, FAKE_CODEX_LOG: join(directory, 'codex-log') };
+}
+
+export async function fakeClaude(bin: string, directory: string): Promise<NodeJS.ProcessEnv> {
+  const log = join(directory, 'claude-model-log');
+  await writeFile(join(bin, 'claude'), `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args.includes('--version')) { console.log('2.1.308 (Fake Claude Code)'); process.exit(0); }
+let input = '';
+process.stdin.on('data', c => input += c);
+process.stdin.on('end', () => {
+  fs.writeFileSync(process.env.FAKE_CLAUDE_LOG, JSON.stringify({args,input,cwd:process.cwd(),gitDir:process.env.GIT_DIR}));
+  const request = JSON.parse(input);
+  const mode = process.env.FAKE_CLAUDE_MODE;
+  if (mode === 'timeout') { setInterval(()=>{},1000); return; }
+  if (mode === 'exit') { console.error('PRIVATE CLI LOG'); process.exit(1); }
+  if (mode === 'json') { console.log('PRIVATE INVALID JSON'); return; }
+  if (mode === 'turn') console.log(JSON.stringify({type:'assistant',message:{content:'PRIVATE UNEXPECTED TURN'}}));
+  const models = mode === 'empty' ? [] : [
+    {value:'default',resolvedModel:'claude-test-largest',supportedEffortLevels:['high']},
+    {value:'large',resolvedModel:'claude-test-largest',supportedEffortLevels:['high']},
+    {value:'fast',resolvedModel:'claude-test-fast',supportedEffortLevels:['low','medium']},
+    {value:'compact[1m]',resolvedModel:'claude-test-compact',supportsEffort:false}
+  ];
+  console.log(JSON.stringify({type:'control_response',response:{
+    request_id:mode === 'missing' ? 'wrong-request' : request.request_id,
+    subtype:mode === 'error' ? 'error' : 'success',error:'PRIVATE CONTROL ERROR',
+    pending_permission_requests:mode === 'permission' ? [{type:'control_request'}] : [],
+    response:{models,account:{PRIVATE:'DO NOT PRINT ACCOUNT DATA'}}
+  }}));
+});
+`, { mode: 0o700 });
+  return { FAKE_CLAUDE_LOG: log };
 }

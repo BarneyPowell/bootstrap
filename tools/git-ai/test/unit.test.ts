@@ -15,6 +15,8 @@ import type { Snapshot } from '../src/git.ts';
 import type { Adapter } from '../src/providers.ts';
 import { modelChoices } from '../src/ollama-models.ts';
 import { codexModels } from '../src/codex-models.ts';
+import { claudeModels, claudeModelRequest } from '../src/claude-models.ts';
+import { buildModelChoices } from '../src/model-picker.ts';
 
 const signal = () => new AbortController().signal;
 const snapshot: Snapshot = { tree: 'tree', history: ['chore: historical example'], changes: [{
@@ -37,6 +39,10 @@ test('model picker arguments default to global and reject ambiguous or unrelated
   assert.equal(parseArgs(['ollama', 'models', '--global']).scope, 'global');
   assert.deepEqual(parseArgs(['codex', 'models']), { command: 'codex-models', options: {}, scope: 'global' });
   assert.equal(parseArgs(['codex', 'models', '--local']).scope, 'local');
+  assert.deepEqual(parseArgs(['claude', 'models']), { command: 'claude-models', options: {}, scope: 'global' });
+  assert.equal(parseArgs(['claude', 'models', '--local']).scope, 'local');
+  assert.throws(() => parseArgs(['claude', 'models', '--provider', 'claude']));
+  assert.throws(() => parseArgs(['claude', 'models', '--global', '--local']));
   for (const args of [['ollama'], ['ollama', 'other'], ['ollama', 'models', '--global', '--local'], ['ollama', 'models', '--provider', 'ollama'], ['ollama', 'models', '--dry-run'], ['codex', 'models', '--all'], ['codex', 'models', '--local', '--global']])
     assert.throws(() => parseArgs(args));
 });
@@ -48,6 +54,33 @@ test('Codex catalog exposes visible identifiers/efforts without instruction temp
   ] }), [{ name: 'literal;$(touch BAD)', remote: true, efforts: ['low'] }]);
   for (const data of [{}, { models: [null] }, { models: [{ slug: 'bad\nname', visibility: 'list' }] },
     { models: [{ slug: 'm', visibility: 'list', supported_reasoning_levels: 'low' }] }]) assert.throws(() => codexModels(data));
+});
+
+test('Claude initialization exposes resolved IDs, preserves context variants and recognises saved aliases', () => {
+  const request = JSON.parse(claudeModelRequest);
+  assert.equal(request.type, 'control_request');
+  assert.equal(request.request.subtype, 'initialize');
+  const envelope = (models: unknown) => JSON.stringify({ type: 'control_response', response: {
+    request_id: request.request_id, subtype: 'success', pending_permission_requests: [], response: { models },
+  } });
+  const models = claudeModels(envelope([
+    { value: 'fast', resolvedModel: 'claude-test-fast', supportedEffortLevels: ['low'] },
+    { value: 'default', resolvedModel: 'claude-test-largest' },
+    { value: 'large', resolvedModel: 'claude-test-largest' },
+    { value: 'compact[1m]', resolvedModel: 'claude-test-compact', supportsEffort: false },
+    { value: 'inherit' },
+  ]));
+  assert.equal(models[0].name, 'claude-test-fast');
+  assert.ok(models.some(model => model.name === 'claude-test-compact[1m]'));
+  assert.ok(!models.some(model => model.name === 'inherit'));
+  const choices = buildModelChoices(models, 'large');
+  assert.equal(choices.length, 3);
+  assert.equal(choices[0].model.name, 'claude-test-largest');
+  assert.deepEqual(choices[0].model.aliases, ['default', 'large']);
+  assert.match(choices[0].label, /current default/);
+  for (const data of ['bad-json', 'null', envelope(null), envelope([{ value: 'bad\nname' }]),
+    envelope([{ value: 'good', resolvedModel: '\x1b[31mbad' }]),
+    envelope([{ value: 'good', supportedEffortLevels: 'low' }])]) assert.throws(() => claudeModels(data));
 });
 
 test('model choices mark and prioritise current selection, deduplicate, and label remote models', () => {
@@ -92,6 +125,8 @@ test('malformed settings fail with their key and do not silently disappear in fa
     ['ai.apple.model', 'cloud'], ['ai.apple.reasoningEffort', 'low'], ['ai.ollama.reasoningEffort', 'low'],
     ['ai.codex.reasoningEffort', 'turbo'], ['ai.claude.reasoningEffort', 'turbo'], ['ai.codex.model', ''],
     ['ai.commit.contextFallback', 'yes'],
+    ['ai.apple.maxContext', '1000'], ['ai.apple.maxContext', '99999'], ['ai.ollama.maxContext', 'big'], ['ai.ollama.maxContext', '1024'],
+    ['ai.ollama.keepAlive', 'forever'], ['ai.ollama.keepAlive', '5d'], ['ai.ollama.keepAlive', '-5'], ['ai.ollama.keepAlive', ''],
   ]) {
     git(directory, 'config', key, value);
     await assert.rejects(loadConfig({}, directory), error => error instanceof Failure && error.kind === 'configuration-invalid' && error.message.includes(key));
@@ -101,6 +136,89 @@ test('malformed settings fail with their key and do not silently disappear in fa
   git(directory, 'config', 'ai.claude.reasoningEffort', 'medium');
   const result = await loadConfig({}, directory);
   assert.deepEqual(result.efforts, { codex: 'low', claude: 'medium' });
+});
+
+test('local context ceilings and Ollama keep-alive default conservatively and accept explicit values', async t => {
+  const directory = await fixture(t);
+  const defaults = await loadConfig({}, directory);
+  assert.deepEqual(defaults.maxContext, { apple: 4096, ollama: 8192 });
+  assert.equal(defaults.ollamaKeepAlive, '0');
+  git(directory, 'config', 'ai.apple.maxContext', '6144');
+  git(directory, 'config', 'ai.ollama.maxContext', '32768');
+  for (const keepAlive of ['-1', '300', '30s', '10m', '1h']) {
+    git(directory, 'config', 'ai.ollama.keepAlive', keepAlive);
+    const result = await loadConfig({}, directory);
+    assert.deepEqual(result.maxContext, { apple: 6144, ollama: 32768 });
+    assert.equal(result.ollamaKeepAlive, keepAlive);
+  }
+});
+
+test('Ollama adapter caps context at ai.ollama.maxContext and forwards keep-alive', async () => {
+  const original = globalThis.fetch;
+  const requests: any[] = [];
+  globalThis.fetch = async (url: any, options: any) => {
+    requests.push([String(url), options]);
+    const body = String(url).endsWith('/api/tags') ? { models: [{ name: 'big-model' }] }
+      : String(url).endsWith('/api/show') ? { model_info: { 'general.architecture': 'fake', 'fake.context_length': 262144 } }
+      : { model: 'big-model', done: true, response: 'fix: update behavior' };
+    return new Response(JSON.stringify(body));
+  };
+  try {
+    for (const [maxContext, keepAlive, expected] of [[8192, '0', 0], [32768, '-1', -1], [32768, '300', 300], [16384, '10m', '10m']] as const) {
+      const adapter = createAdapter('ollama', config({ models: { ollama: 'big-model' }, maxContext: { apple: 4096, ollama: maxContext }, ollamaKeepAlive: keepAlive }));
+      assert.equal((await adapter.probe(signal())).inputBytes, maxContext - 1024);
+      await adapter.generate('prepared input only', signal());
+      const payload = JSON.parse(requests.at(-1)[1].body);
+      assert.equal(payload.options.num_ctx, maxContext);
+      assert.strictEqual(payload.keep_alive, expected);
+    }
+    // A model whose own window is smaller than the ceiling is never padded up to it.
+    globalThis.fetch = async (url: any) => new Response(JSON.stringify(String(url).endsWith('/api/tags') ? { models: [{ name: 'small' }] }
+      : { model_info: { 'general.architecture': 'fake', 'fake.context_length': 4096 } }));
+    const small = createAdapter('ollama', config({ models: { ollama: 'small' }, maxContext: { apple: 4096, ollama: 32768 } }));
+    assert.equal((await small.probe(signal())).inputBytes, 4096 - 1024);
+  } finally { globalThis.fetch = original; }
+});
+
+test('Apple budget follows ai.apple.maxContext and an fm context overflow escalates as context-too-large', async t => {
+  const directory = await fixture(t);
+  const bin = join(directory, 'fake-bin');
+  await mkdir(bin);
+  await writeFile(join(bin, 'fm'), `#!/usr/bin/env node
+process.stdin.resume();
+process.stdin.on('end', () => {
+  const args = process.argv.slice(2);
+  if (args[0] === 'config') console.log('(none)');
+  else if (args[0] === 'models') { console.log('✓ system (AFM model)'); }
+  else if (args[0] === 'count-tokens') console.log(process.env.FM_TEST_TOKENS);
+  else if (args[0] === 'respond' && process.env.FM_TEST_MODE === 'overflow') { console.error("Error: The session's transcript exceeded the model's context size. SECRET"); process.exitCode = 1; }
+  else if (args[0] === 'respond' && process.env.FM_TEST_MODE === 'broken') { console.error('some other failure'); process.exitCode = 1; }
+  else if (args[0] === 'respond') console.log('fix: update behavior');
+});
+`, { mode: 0o700 });
+  const oldPath = process.env.PATH;
+  process.env.PATH = `${bin}:${oldPath}`;
+  try {
+    process.env.FM_TEST_TOKENS = '5000';
+    const conservative = createAdapter('apple', config());
+    assert.equal((await conservative.probe(signal())).inputBytes, 4096 - 1024);
+    await assert.rejects(conservative.generate('x', signal()), (e: any) => e.kind === 'context-too-large');
+    const raised = createAdapter('apple', config({ maxContext: { apple: 6144, ollama: 8192 } }));
+    assert.equal((await raised.probe(signal())).inputBytes, 6144 - 1024);
+    assert.match(await raised.generate('x', signal()), /fix: update behavior/);
+    process.env.FM_TEST_TOKENS = '5200';
+    await assert.rejects(raised.generate('x', signal()), (e: any) => e.kind === 'context-too-large');
+    // The real window can be smaller than a raised ceiling: fm's overflow is classified, never echoed.
+    process.env.FM_TEST_TOKENS = '3000';
+    process.env.FM_TEST_MODE = 'overflow';
+    await assert.rejects(raised.generate('x', signal()), (e: any) => e.kind === 'context-too-large' && !/SECRET/.test(e.message));
+    process.env.FM_TEST_MODE = 'broken';
+    await assert.rejects(raised.generate('x', signal()), (e: any) => e.kind === 'transport/service-error');
+  } finally {
+    process.env.PATH = oldPath;
+    delete process.env.FM_TEST_TOKENS;
+    delete process.env.FM_TEST_MODE;
+  }
 });
 
 test('response validation preserves body/footers and rejects unsafe or malformed messages', () => {

@@ -1,5 +1,7 @@
 # git-ai
 
+Welcome!
+
 `git ai commit` proposes one Conventional Commits message for the **staged**
 changes, then opens Git's normal commit editor. Saving and exiting accepts the
 prefilled message, including when you leave it unchanged. To abort, delete the
@@ -50,6 +52,8 @@ git ai ollama models
 git ai ollama models --local
 git ai codex models
 git ai codex models --local
+git ai claude models
+git ai claude models --local
 git ai commit
 git ai commit --dry-run
 git ai commit --provider apple
@@ -118,6 +122,40 @@ picker reports that mismatch and leaves the effort setting for you to review.
 Missing/older CLIs, invalid catalogs, timeouts, empty lists, and cancellation do
 not change the setting.
 
+### Choose a Claude default
+
+`git ai claude models` uses the same gum picker to save **`ai.claude.model`
+globally**; `--local` writes a repository override. It highlights the saved
+selection, including an existing alias, and saves the CLI's resolved model ID
+where available. Context-window suffixes are retained. Duplicate aliases that
+resolve to the same ID share one row. Cancellation leaves the setting alone.
+Provider order, cloud permission and reasoning effort are unchanged; an effort
+mismatch is reported without changing that setting.
+
+The selector reads `models` from Claude Code's Agent SDK **initialize response**,
+the metadata used by [`supportedModels()`](https://code.claude.com/docs/en/agent-sdk/typescript#query-object).
+The control-request envelope was checked against the
+[official SDK implementation](https://github.com/anthropics/claude-agent-sdk-python/blob/main/src/claude_agent_sdk/_internal/query.py).
+It sends exactly one initialization request and **no user prompt**, without
+installing an SDK package or starting a daemon. The CLI runs in a private
+temporary directory with safe/restricted mode, no built-in tools, no MCP
+servers, no user/project setting sources, and session persistence disabled.
+Pending permissions, unexpected generation messages, invalid metadata and
+incompatible CLIs fail without saving. Raw initialization/account data is not
+displayed or retained.
+
+Model listing can perform the CLI's normal metadata/authentication checks;
+unlike Codex's bundled-catalog mode, it has no verified offline-only guarantee.
+No repository contents are supplied, and no inference is requested, even when
+`ai.allowCloud=false`. Managed Claude policies still apply during initialization.
+Entries are CLI choices, not proof of account entitlement. This was verified
+with Claude Code 2.1.308; older versions lacking these flags/protocol fields may
+be unavailable.
+
+**Selecting a Claude model does not enable Claude commit generation.** That
+adapter still reports unavailable for the reasons below; this command manages
+the saved preference independently.
+
 ### Context too large: offer Codex
 
 `ai.commit.contextFallback` controls what happens when Apple/Ollama cannot fit the
@@ -174,8 +212,11 @@ precedence. Values are validated before any provider request; Git parses boolean
 | `ai.commit.subjectMaxLength` | `72`; integer 1–1000 Unicode characters |
 | `ai.commit.contextFallback` | `ask`; `ask`, `auto`, or `never`; Codex escalation after context-size failure |
 | `ai.apple.model` | `system`; fm's explicitly selected on-device model; no other identifier |
+| `ai.apple.maxContext` | `4096`; integer 2048–32768 tokens (1024 reserved for output). Raise (for example `6144`) only as far as `fm` accepts; an overflow falls back as a context failure |
 | `ai.ollama.model` | No default; exact identifier from your service's installed-model list |
 | `ai.ollama.endpoint` | `http://127.0.0.1:11434`; HTTP(S) origin, no credentials/path/query/fragment |
+| `ai.ollama.maxContext` | `8192`; integer 2048–131072 tokens. The smaller of this and the model's reported context is used for `num_ctx` |
+| `ai.ollama.keepAlive` | `0` (unload after each request); `-1` (keep loaded), seconds, or a duration such as `10m` |
 | `ai.codex.model` | No default; explicit identifier supported by your ChatGPT Codex CLI login |
 | `ai.codex.reasoningEffort` | Unset; `none`, `minimal`, `low`, `medium`, `high`, `xhigh`; must also be supported by the chosen model |
 | `ai.claude.model` | No default; explicit identifier; adapter currently unavailable |
@@ -217,7 +258,9 @@ versions, and lightweight availability without sending repository contents.
 CLI probes run in private temporary directories without repository data. Codex
 checks `exec --help` and `features list` for required controls before generation;
 older/incompatible CLIs remain unavailable. Inspected installed version: 0.166.0.
-Claude only probes its version and remains unavailable. Authentication and model
+Claude generation only probes its version and remains unavailable; its separate
+model selector performs the metadata-only initialize handshake above.
+Authentication and model
 entitlement cannot be established from these probes alone; generation errors
 provide setup guidance without printing raw provider logs.
 
@@ -281,12 +324,16 @@ or raw provider-log output. Vendor/OS implementations have their own behaviour.
 Patches are captured up to 32 KiB per file (metadata capture limit 2 MB). Context
 packing conservatively budgets **one UTF-8 byte per estimated token**, not an
 exact tokenizer count, and reserves 1024 tokens for output/template overhead.
-Apple conservatively budgets the documented 4096-token baseline and uses `fm`
-to count actual input tokens before inference; this CLI does not expose the
-current context size or a maximum output-token flag. Output is bounded by the
-deadline, capture limit, and message validation instead. Ollama uses reported
-context capped at 8192 tokens, explicitly sets `num_ctx`, and requests at most
-512 output tokens. Optional history is dropped before patch content; oversized
+Apple budgets `ai.apple.maxContext` tokens (default: the documented 4096-token
+baseline) and uses `fm` to count actual input tokens before inference; this CLI
+does not expose the current context size or a maximum output-token flag. If you
+raise the ceiling above the real window, an `fm` context overflow is classified
+as a context failure (and may escalate per `ai.commit.contextFallback`), never
+echoed. Output is bounded by the deadline, capture limit, and message validation
+instead. Ollama uses the model's reported context capped at `ai.ollama.maxContext`
+(default 8192) tokens, explicitly sets `num_ctx`, and requests at most 512 output
+tokens. It sends `keep_alive` from `ai.ollama.keepAlive` (default `0`, which
+unloads the model after each request). Optional history is dropped before patch content; oversized
 patches receive per-file excerpts, with compact lockfile/generated evidence.
 The complete inventory and omission labels remain. Inventory that cannot fit
 causes context failure/fallback; no multi-call summarisation is attempted.
@@ -325,6 +372,9 @@ Codex picker tests use a fake CLI catalog to verify visible-model filtering,
 offline/refreshed listing arguments, scope, unchanged policies and effort, error
 redaction, deadlines and cleanup. The Ollama/Codex pickers share the same UI and
 Git-setting code.
+Claude picker tests use fake initialization metadata and cover resolved IDs,
+aliases, context variants, global/local scope, cancellation, rejected permissions
+and generation turns, invalid metadata, failures, timeouts and resource cleanup.
 Context fallback tests exercise gum accept/decline/cancel, unattended automatic
 mode, privacy/pinning/never policies, Codex arguments and stdin, repair limits,
 auth/context/effort errors, tool-event refusal, deadlines and temporary cleanup
@@ -342,6 +392,9 @@ current-default row and the selected value is captured separately from the UI.
 The installed Codex 0.166.0 `debug models --bundled` interface and catalog metadata
 were inspected offline; catalog listing did not verify account entitlement and
 no live catalog refresh was tested.
+Claude Code 2.1.308 returned five model choices in a real initialization-only
+probe. The selector parser and deduplication are also checked against that
+interface; no Claude model inference or real preference write was performed.
 Ollama client 0.40.11 was present, with no
 running service during inspection. A deliberate synthetic `gpt-6.1-terra` Codex
 request reproduced a successful zero-exit, completed turn with a non-fatal error
@@ -377,5 +430,5 @@ failures are Git failures: recover normally; do not assume a commit was created.
 The CLI dispatch table is the extension point for future subcommands. Provider,
 configuration, Git, prompt, validation, fallback, and handoff concerns stay in
 separate modules. `ollama models` manages the provider's default independently of
-commit generation, as does `codex models`. There is no plugin framework or
+commit generation, as do `codex models` and `claude models`. There is no plugin framework or
 additional autonomous coding workflow.

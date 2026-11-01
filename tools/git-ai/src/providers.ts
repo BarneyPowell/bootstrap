@@ -31,7 +31,7 @@ async function fm(args: string[], signal: AbortSignal, input?: string) {
 
 const plainProbe = (output: string) => output.replace(/\x1b\[[0-9;]*m/g, '');
 
-async function appleProbe(signal: AbortSignal): Promise<Capabilities> {
+async function appleProbe(signal: AbortSignal, context: number): Promise<Capabilities> {
   // fm ignores HOME for its config path. Refuse custom-provider defaults rather
   // than risking transmission through a user's configured remote provider.
   const configured = await fm(['config', 'get', 'default-model-provider'], signal);
@@ -41,8 +41,8 @@ async function appleProbe(signal: AbortSignal): Promise<Capabilities> {
   // fm models exits nonzero if PCC is unavailable even when system is ready.
   if (!/^\s*✓\s+system\s+\(/m.test(plainProbe(result.stdout)))
     throw new Failure('unavailable', 'fm system model is unavailable. Check fm models, Apple Intelligence readiness, and fm license --status. git-ai never accepts terms for you.');
-  return { model: 'system', locality: 'local', inputBytes: 4096 - 1024,
-    detail: 'fm system model available; conservative 4096-token baseline (CLI does not expose context size); inference not probed.' };
+  return { model: 'system', locality: 'local', inputBytes: context - 1024,
+    detail: `fm system model available; ${context}-token budget from ai.apple.maxContext (CLI does not expose context size); inference not probed.` };
 }
 
 export function isLoopback(endpoint: string): boolean {
@@ -98,7 +98,7 @@ export function createAdapter(name: ProviderName, config: Config): Adapter {
         throw new Failure('privacy-blocked', 'Remote inference requires effective Git config ai.allowCloud=true.');
       if (!model) throw new Failure('model-not-configured', `Set ai.${name}.model to an explicit supported model identifier.`);
       if (name === 'apple') {
-        return await appleProbe(signal);
+        return await appleProbe(signal, config.maxContext.apple);
       }
       if (name === 'ollama') {
         const tags = await httpJSON(config.endpoint, '/api/tags', undefined, signal);
@@ -112,7 +112,7 @@ export function createAdapter(name: ProviderName, config: Config): Adapter {
         const arch = info.model_info?.['general.architecture'];
         context = info.model_info?.[`${arch}.context_length`];
         if (!Number.isSafeInteger(context) || context < 1024) throw new Failure('unavailable', 'Ollama does not report a usable model context_length.');
-        context = Math.min(context, 8192);
+        context = Math.min(context, config.maxContext.ollama);
         return { model, locality, inputBytes: context - 1024, detail: `Model present; using ${context} tokens of reported context, with conservative byte budgeting; inference not probed.` };
       }
       // These CLIs are agents. Do not send a prompt until all side effects can be
@@ -123,19 +123,24 @@ export function createAdapter(name: ProviderName, config: Config): Adapter {
     async generate(prompt, signal) {
       if (name === 'apple') {
         // Recheck the custom-provider default immediately before handling content.
-        await appleProbe(signal);
+        await appleProbe(signal, config.maxContext.apple);
         const count = await fm(['count-tokens', '--quiet'], signal, prompt);
         const tokens = Number(count.stdout.trim());
         if (count.code !== 0 || !/^\d+$/.test(count.stdout.trim()) || !Number.isSafeInteger(tokens) || tokens <= 0)
           throw new Failure('unavailable', 'fm could not count tokens for the on-device model. Check Apple Intelligence readiness.');
-        if (tokens > 4096 - 1024) throw new Failure('context-too-large', 'fm prompt exceeds the conservative on-device context budget.');
+        if (tokens > config.maxContext.apple - 1024) throw new Failure('context-too-large', 'fm prompt exceeds the configured on-device context budget (ai.apple.maxContext).');
         const result = await fm(['respond', '--model', 'system', '--use-case', 'general', '--guardrails', 'default', '--no-stream', '--greedy'], signal, prompt);
+        // A raised ai.apple.maxContext can exceed the real window. Classify that overflow (stderr is never
+        // surfaced) so it escalates like any context failure instead of reading as a service error.
+        if (result.code !== 0 && /exceeded the model's context size/i.test(result.stderr))
+          throw new Failure('context-too-large', 'fm reported the prompt exceeds the on-device context size; lower ai.apple.maxContext.');
         if (result.code !== 0) throw new Failure('transport/service-error', 'fm generation failed. Check fm models and Apple Intelligence readiness; raw diagnostics suppressed.');
         return result.stdout;
       }
       if (name === 'ollama') {
         const data = await httpJSON(config.endpoint, '/api/generate', {
-          model, prompt, raw: true, stream: false, keep_alive: 0,
+          model, prompt, raw: true, stream: false,
+          keep_alive: /^-?\d+$/.test(config.ollamaKeepAlive) ? Number(config.ollamaKeepAlive) : config.ollamaKeepAlive,
           options: { num_ctx: context, num_predict: 512, temperature: 0.2 },
         }, signal);
         if (data.error || data.done !== true) throw new Failure('transport/service-error', 'Ollama did not complete generation.');

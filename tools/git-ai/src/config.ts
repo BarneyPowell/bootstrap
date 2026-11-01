@@ -8,6 +8,7 @@ export type Config = {
   providers: ProviderName[]; allowCloud: boolean; timeoutSeconds: number;
   contextFallback: 'ask' | 'auto' | 'never'; pinned: boolean;
   recentCount: number; subjectMaxLength: number; endpoint: string;
+  maxContext: { apple: number; ollama: number }; ollamaKeepAlive: string;
   models: Partial<Record<ProviderName, string>>;
   efforts: Partial<Record<ProviderName, string>>;
   origins: Record<string, string>;
@@ -45,6 +46,12 @@ export async function loadConfig(overrides: Overrides = {}, cwd?: string, signal
   const timeoutSeconds = await integer('ai.timeoutSeconds', 30, 1, 3600);
   const recentCount = await integer('ai.commit.recentCount', 8, 0, 100);
   const subjectMaxLength = await integer('ai.commit.subjectMaxLength', 72, 1, 1000);
+  // Token ceilings for local providers. Defaults are conservative; each reserves 1024 tokens for output.
+  const maxContext = { apple: await integer('ai.apple.maxContext', 4096, 2048, 32768),
+    ollama: await integer('ai.ollama.maxContext', 8192, 2048, 131072) };
+  const ollamaKeepAlive = (await read('ai.ollama.keepAlive')) ?? '0';
+  if (!/^(?:-1|\d+|\d+[smh])$/.test(ollamaKeepAlive))
+    invalid('ai.ollama.keepAlive', 'expected -1, a number of seconds, or a duration such as 30s, 10m or 1h.');
   const models: Config['models'] = {}, efforts: Config['efforts'] = {};
   for (const provider of providers) {
     const model = overrides.provider === provider && overrides.model !== undefined ? overrides.model : await read(`ai.${provider}.model`);
@@ -69,5 +76,5 @@ export async function loadConfig(overrides: Overrides = {}, cwd?: string, signal
     invalid(`ai.${overrides.provider}.model`, 'a pinned provider requires an explicit model; set this key or pass --model <id>.');
   return { providers: overrides.provider ? [overrides.provider] : list as ProviderName[], allowCloud, timeoutSeconds,
     contextFallback: contextFallback as Config['contextFallback'], pinned: !!overrides.provider,
-    recentCount, subjectMaxLength, endpoint: url.origin, models, efforts, origins };
+    recentCount, subjectMaxLength, endpoint: url.origin, maxContext, ollamaKeepAlive, models, efforts, origins };
 }

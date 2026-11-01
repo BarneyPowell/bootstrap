@@ -72,6 +72,7 @@ configuration, privacy, tests, and editor acceptance/abort behaviour.
 Use `git ai ollama models` for a gum picker that saves your global default
 Ollama model without changing provider order.
 `git ai codex models` does the same for the explicit `ai.codex.model` default.
+`git ai claude models` selects the `ai.claude.model` preference through the same UI.
 When local context is too small, `ai.commit.contextFallback` can ask through gum
 or automatically try Codex, subject to cloud permission and an explicit model.
 

@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { Git } from '../src/git.ts';
 import { commit } from '../src/commit.ts';
 import { run } from '../src/process.ts';
-import { fixture, git, stage, fakeCodex } from './helpers.ts';
+import { fixture, git, stage, fakeCodex, fakeClaude } from './helpers.ts';
 
 const root = fileURLToPath(new URL('../../..', import.meta.url));
 const entry = join(root, 'scripts/git/git-ai');
@@ -620,5 +620,63 @@ for (const mode of ['error', 'invalid', 'empty', 'timeout']) {
     assert.doesNotMatch(result.stdout + result.stderr, /PRIVATE/);
     const catalog = JSON.parse(await readFile(catalogLog, 'utf8'));
     assert.ok(!(await readdir(tmpdir())).includes(catalog.cwd.split('/').at(-1)));
+  });
+}
+
+async function claudePickerFixture(t: any) {
+  const base = await pickerFixture(t);
+  const claude = await fakeClaude(base.bin, base.directory);
+  await writeFile(base.globalFile, '[ai]\nproviders = apple,codex\nallowCloud = false\n[ai "claude"]\nmodel = fast\nreasoningEffort = low\n');
+  return { ...base, env: { ...base.env, ...claude } };
+}
+
+test('Claude picker marks a saved alias and saves only a resolved global model via initialization with no user prompt', async t => {
+  const { directory, env, globalFile, log } = await claudePickerFixture(t);
+  const result = await cli(directory, ['claude', 'models'], env, true);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const saved = await readFile(globalFile, 'utf8');
+  assert.match(saved, /model = claude-test-compact\[1m\]/);
+  assert.match(saved, /providers = apple,codex/);
+  assert.match(saved, /allowCloud = false/);
+  assert.match(saved, /reasoningEffort = low/);
+  assert.match(result.stdout, /reasoningEffort was left unchanged/);
+  assert.match(result.stdout, /commit generation is still unavailable/);
+  assert.match(JSON.parse(await readFile(log, 'utf8')).args.join(' '), /claude-test-fast.*current default/);
+  const metadata = JSON.parse(await readFile(env.FAKE_CLAUDE_LOG!, 'utf8'));
+  assert.equal(JSON.parse(metadata.input).type, 'control_request');
+  assert.equal(JSON.parse(metadata.input).request.subtype, 'initialize');
+  assert.equal(metadata.input.trim().split('\n').length, 1);
+  assert.equal(metadata.gitDir, undefined);
+  assert.ok(!metadata.cwd.startsWith(directory));
+  for (const flag of ['--no-session-persistence', '--safe-mode', '--restricted', '--tools', '--strict-mcp-config', '--setting-sources', '--no-chrome'])
+    assert.ok(metadata.args.includes(flag), flag);
+  assert.ok(!(await readdir(tmpdir())).includes(metadata.cwd.split('/').at(-1)));
+  assert.doesNotMatch(result.stdout + result.stderr, /PRIVATE/);
+});
+
+test('Claude local picker leaves global default untouched and cancellation saves nothing', async t => {
+  const { directory, env, globalFile } = await claudePickerFixture(t);
+  git(directory, 'config', 'ai.claude.model', 'fast');
+  const before = await readFile(globalFile, 'utf8');
+  const cancelled = await cli(directory, ['claude', 'models', '--local'], { ...env, PICKER_MODE: 'cancel' }, true);
+  assert.equal(cancelled.code, 130);
+  assert.equal(git(directory, 'config', 'ai.claude.model'), 'fast');
+  const result = await cli(directory, ['claude', 'models', '--local'], env, true);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.equal(git(directory, 'config', 'ai.claude.model'), 'claude-test-compact[1m]');
+  assert.equal(await readFile(globalFile, 'utf8'), before);
+});
+
+for (const mode of ['exit', 'error', 'json', 'missing', 'empty', 'permission', 'turn', 'timeout']) {
+  test(`Claude model-list ${mode} saves nothing, suppresses private data and cleans temporary resources`, async t => {
+    const { directory, env, globalFile } = await claudePickerFixture(t);
+    git(directory, 'config', 'ai.timeoutSeconds', '1');
+    const before = await readFile(globalFile, 'utf8');
+    const result = await cli(directory, ['claude', 'models'], { ...env, FAKE_CLAUDE_MODE: mode }, true);
+    assert.equal(result.code, 1, result.stdout + result.stderr);
+    assert.equal(await readFile(globalFile, 'utf8'), before);
+    assert.doesNotMatch(result.stdout + result.stderr, /PRIVATE/);
+    const metadata = JSON.parse(await readFile(env.FAKE_CLAUDE_LOG!, 'utf8'));
+    assert.ok(!(await readdir(tmpdir())).includes(metadata.cwd.split('/').at(-1)));
   });
 }
