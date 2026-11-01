@@ -31,6 +31,53 @@ The script is designed to be idempotent: running it repeatedly should not duplic
 
 ## Safer usage
 
+### Custom Git commands from a local clone
+
+Clone this repository, change into it, and run:
+
+```sh
+make install
+git hello
+```
+
+The Makefile currently installs custom Git commands. The broader shell setup
+described below still uses the legacy `install.sh`.
+
+Before installing commands, the `ensure-gum` prerequisite checks for `gum`.
+If it is missing, an interactive menu offers to install it through Homebrew,
+skip it for this run, or skip it and stop asking. The last choice is saved in
+`${XDG_STATE_HOME:-~/.local/state}/bootstrap/gum-no-prompt`; delete that file to
+enable the prompt again. Unattended runs skip the prompt without saving a choice.
+You can also run this check separately with `make ensure-gum`.
+
+`make install` symlinks executable `scripts/git/git-*` files into `~/.local/bin`
+and ensures zsh adds that directory to `PATH`. In an existing terminal that does
+not already include it, run `export PATH="$HOME/.local/bin:$PATH"` first, or open
+a new terminal.
+
+Git discovers these commands automatically: `scripts/git/git-hello` becomes
+`git hello`. Add another executable script with the `git-` prefix and rerun
+`make install` (or `make install-git`). Edits to linked scripts take effect
+immediately. Keep the clone in place so the symlinks continue to work.
+
+Repeated installs leave correct links alone. Conflicting files are reported
+without being overwritten; move them aside before retrying.
+
+### AI-assisted commit messages
+
+`make install` also exposes `git ai commit`: it proposes a Conventional Commits
+message for staged changes and opens Git's editor for review. See the
+[git-ai guide](tools/git-ai/README.md) for runtime/build requirements, providers,
+configuration, privacy, tests, and editor acceptance/abort behaviour.
+Use `git ai ollama models` for a gum picker that saves your global default
+Ollama model without changing provider order.
+`git ai codex models` does the same for the explicit `ai.codex.model` default.
+`git ai claude models` selects the `ai.claude.model` preference through the same UI.
+When local context is too small, `ai.commit.contextFallback` can ask through gum
+or automatically try Codex, subject to cloud permission and an explicit model.
+
+### Legacy installer usage
+
 Use a version tag for repeatable installs. `v1.2` will always mean the latest v1.2.x installer:
 
 ```sh

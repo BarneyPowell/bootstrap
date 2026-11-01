@@ -148,7 +148,8 @@ ask() {
 backup_file() {
   local path="$1"
   if [[ -f "$path" ]]; then
-    local backup="${path}.bak.$(date +%Y%m%d%H%M%S)"
+    local backup
+    backup="${path}.bak.$(date +%Y%m%d%H%M%S)"
     log "Backing up $path to $backup"
     run cp "$path" "$backup"
   fi
@@ -542,6 +543,8 @@ ensure_homebrew() {
   fi
 
   if ask "Install Homebrew?"; then
+    # Defer command substitution to the shell started by run_shell.
+    # shellcheck disable=SC2016
     run_shell '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"'
   else
     warn "Homebrew not installed; skipping brew-managed packages"
@@ -679,6 +682,8 @@ ensure_omz() {
   fi
 
   if ask "Install Oh My Zsh?"; then
+    # Defer command substitution to the shell started by run_shell.
+    # shellcheck disable=SC2016
     run_shell 'RUNZSH=no CHSH=no KEEP_ZSHRC=yes sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"'
   else
     warn "Oh My Zsh not installed"
