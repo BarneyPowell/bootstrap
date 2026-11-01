@@ -24,6 +24,36 @@ async function choose(header: string, labels: string[], signal: AbortSignal) {
   return { code: result.code, picked: result.stdout.replace(/\r?\n$/, '') };
 }
 
+// Break one message line to fit the card, at spaces where possible. Continuations
+// are marked so a soft wrap is never mistaken for a real line break in the message.
+export function softWrap(line: string, width: number, marker = '↳ '): string[] {
+  const chars = [...line];
+  width = Math.max(1, width);
+  if (chars.length <= width) return [line];
+  const pieces: string[] = [];
+  let rest = chars, limit = width;
+  while (rest.length > limit) {
+    const space = rest.slice(0, limit + 1).lastIndexOf(' ');
+    const cut = space > 0 ? space : limit;
+    pieces.push(rest.slice(0, cut).join(''));
+    rest = rest.slice(space > 0 ? cut + 1 : cut);
+    limit = Math.max(1, width - [...marker].length);
+  }
+  pieces.push(rest.join(''));
+  return pieces.map((piece, i) => i === 0 ? piece : marker + piece);
+}
+
+// The proposal card: border 2 + padding 2 columns, so text gets the rest of the terminal.
+export async function renderCard(proposal: Proposal, columns: number, signal: AbortSignal): Promise<string> {
+  const inner = Math.max(20, columns - 4);
+  const [subject, ...body] = proposal.message.split('\n');
+  const source = `${proposal.provider} · ${diagnostic(proposal.model)} (${proposal.locality})`;
+  const lines = [await styleText(signal, softWrap(subject, inner).join('\n'), '--bold'),
+    ...body.flatMap(line => softWrap(line, inner))];
+  return [await styleText(signal, softWrap(`Proposed commit message · ${source}`, columns, '').join('\n'), '--bold', '--foreground=141'),
+    await styleText(signal, lines.join('\n'), '--border=rounded', '--border-foreground=141', '--padding=0 1')].join('\n');
+}
+
 // Show the validated proposal and ask what to do with it. Anything that stops gum
 // from asking falls back to the editor, where the user can still abort.
 export async function reviewMessage(proposal: Proposal, signal: AbortSignal, report: (line: string) => void): Promise<Decision> {
@@ -33,16 +63,11 @@ export async function reviewMessage(proposal: Proposal, signal: AbortSignal, rep
     report('gum is unavailable, so the proposal opens in your editor. Run make ensure-gum for the accept/edit/reject prompt.');
     return 'edit';
   }
-  const [subject, ...body] = proposal.message.split('\n');
-  const source = `${proposal.provider} · ${diagnostic(proposal.model)} (${proposal.locality})`;
   let card: string;
-  try {
-    const text = [await styleText(signal, subject, '--bold'), ...body].join('\n');
-    card = [await styleText(signal, `Proposed commit message · ${source}`, '--bold', '--foreground=141'),
-      await styleText(signal, text, '--border=rounded', '--border-foreground=141', '--padding=0 1')].join('\n');
-  } catch {
+  try { card = await renderCard(proposal, process.stderr.columns || 80, signal); }
+  catch {
     cancelled(signal);
-    card = `Proposed commit message (${source}):\n\n${proposal.message}\n`;
+    card = `Proposed commit message (${proposal.provider} · ${diagnostic(proposal.model)}):\n\n${proposal.message}\n`;
   }
   process.stderr.write(card + '\n');
   const { code, picked } = await choose('Commit with this message?', choices.map(([, label]) => label), signal);

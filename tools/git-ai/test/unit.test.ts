@@ -18,6 +18,7 @@ import { codexModels } from '../src/codex-models.ts';
 import { claudeModels, claudeModelRequest } from '../src/claude-models.ts';
 import { buildModelChoices } from '../src/model-picker.ts';
 import { plainLines, nextSteps, wrap } from '../src/doctor.ts';
+import { softWrap } from '../src/review.ts';
 import type { DoctorReport } from '../src/doctor.ts';
 
 const signal = () => new AbortController().signal;
@@ -584,4 +585,19 @@ test('doctor wrapping keeps a hanging indent and never exceeds the width', () =>
   for (const line of long.split('\n')) assert.ok([...line].length <= 30, line);
   assert.ok(long.split('\n').slice(1).every(line => line.startsWith('  ')));
   assert.equal(wrap('', 20, '• ', '  '), '• ');
+});
+
+test('review card soft-wraps long lines to fit, marks continuations, and keeps short lines verbatim', () => {
+  assert.deepEqual(softWrap('fix: short', 20), ['fix: short']);
+  assert.deepEqual(softWrap('  - indented bullet kept as-is', 40), ['  - indented bullet kept as-is']);
+  assert.deepEqual(softWrap('aaa bbb ccc', 7), ['aaa bbb', '↳ ccc']);
+  assert.deepEqual(softWrap('abcdefghij', 4), ['abcd', '↳ ef', '↳ gh', '↳ ij']);
+  assert.deepEqual(softWrap('', 10), ['']);
+  assert.deepEqual(softWrap('ab cd', 0, ''), ['a', 'b', 'c', 'd']);
+  const long = 'Describe the change in detail. '.repeat(12).trim();
+  const pieces = softWrap(long, 30);
+  assert.ok(pieces.length > 1 && pieces.every(piece => [...piece].length <= 30));
+  assert.ok(pieces.slice(1).every(piece => piece.startsWith('↳ ')));
+  // Nothing is lost: removing the markers and rejoining at spaces restores the line.
+  assert.equal(pieces.map(piece => piece.replace(/^↳ /, '')).join(' '), long);
 });
