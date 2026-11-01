@@ -6,13 +6,15 @@ import { commit } from './commit.ts';
 import { createAdapter, executableVersion } from './providers.ts';
 import { Failure, diagnostic } from './errors.ts';
 import { platform, release } from 'node:os';
+import { selectOllamaModel } from './ollama-models.ts';
+import { selectCodexModel } from './codex-models.ts';
 
 const controller = new AbortController();
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => controller.abort(signal));
 const report = (line: string) => process.stderr.write(`git-ai: ${diagnostic(line)}\n`);
 
 async function main(): Promise<number> {
-  const { command, options } = parseArgs(process.argv.slice(2));
+  const { command, options, scope } = parseArgs(process.argv.slice(2));
   if (command === 'help' || command === 'version') {
     process.stdout.write(command === 'help' ? help : 'git-ai 1.0.0\n');
     return 0;
@@ -20,9 +22,12 @@ async function main(): Promise<number> {
   if (command === 'commit' && !options.dryRun && (!process.stdin.isTTY || !process.stdout.isTTY))
     throw new Failure('unavailable', 'Commit review requires an interactive terminal. Use --dry-run for generation without an editor.');
   const config = await loadConfig(options, undefined, controller.signal);
+  if (command === 'ollama-models') return await selectOllamaModel(config, scope ?? 'global', controller.signal, report);
+  if (command === 'codex-models') return await selectCodexModel(config, scope ?? 'global', controller.signal, report);
   if (command === 'doctor') {
     report(`OS=${platform()} ${release()}; Node=${process.version}; cloud=${config.allowCloud ? 'allowed' : 'blocked'}`);
     report(`provider order=${config.providers.join(' -> ')}; deadline=${config.timeoutSeconds}s per provider`);
+    report(`context fallback=${config.contextFallback}; ai.allowCloud remains the cloud gate`);
     for (const [key, origin] of Object.entries(config.origins)) report(`${key} origin=${origin}`);
     for (const name of providers) {
       report(`${name}: model=${config.models[name] ?? (name === 'apple' ? 'system' : '(not configured)')}; reasoning=${config.efforts[name] ?? '(not set)'}`);
@@ -63,5 +68,5 @@ async function main(): Promise<number> {
 try { process.exitCode = await main(); }
 catch (error) {
   report(error instanceof Failure ? `${error.kind}: ${error.message}` : 'Unexpected failure; raw diagnostics suppressed. Run git ai doctor.');
-  process.exitCode = controller.signal.aborted ? (controller.signal.reason === 'SIGTERM' ? 143 : 130) : 1;
+  process.exitCode = controller.signal.aborted ? (controller.signal.reason === 'SIGTERM' ? 143 : 130) : error instanceof Failure && error.kind === 'cancelled' ? 130 : 1;
 }

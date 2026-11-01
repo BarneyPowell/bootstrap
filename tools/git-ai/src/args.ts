@@ -8,18 +8,29 @@ Usage:
   git ai commit [--dry-run] [--provider apple|ollama|codex|claude]
                 [--model <id>] [--reasoning-effort <level>]
   git ai doctor
+  git ai ollama models [--global|--local]
+  git ai codex models [--global|--local]
   git ai --help
   git ai --version
 
 --model and --reasoning-effort require --provider. Provider pinning disables
 fallback. No Git commit flags or pathspecs are accepted. Cloud inference is
 disabled unless effective Git config ai.allowCloud is true.
+ollama models uses gum to save only ai.ollama.model (global by default).
+codex models uses gum to save only ai.codex.model (global by default).
+Oversized context can escalate to Codex: ai.commit.contextFallback=ask|auto|never
+(default ask). Requires ai.allowCloud=true and an explicit ai.codex.model.
 `;
 
-export function parseArgs(args: string[]): { command: 'help' | 'version' | 'doctor' | 'commit'; options: Overrides } {
+export function parseArgs(args: string[]): { command: 'help' | 'version' | 'doctor' | 'commit' | 'ollama-models' | 'codex-models'; options: Overrides; scope?: 'global' | 'local' } {
   if (args.length === 0 || (args.length === 1 && args[0] === '--help')) return { command: 'help', options: {} };
   if (args.length === 1 && args[0] === '--version') return { command: 'version', options: {} };
   if (args.length === 1 && args[0] === 'doctor') return { command: 'doctor', options: {} };
+  if (['ollama', 'codex'].includes(args[0]) && args[1] === 'models') {
+    if (args.length > 3 || (args[2] !== undefined && !['--global', '--local'].includes(args[2])))
+      throw new Failure('configuration-invalid', `Usage: git ai ${args[0]} models [--global|--local].`);
+    return { command: args[0] === 'codex' ? 'codex-models' : 'ollama-models', options: {}, scope: args[2] === '--local' ? 'local' : 'global' };
+  }
   if (args[0] !== 'commit') throw new Failure('configuration-invalid', 'Unknown subcommand. Run git ai --help.');
   const options: Overrides = {};
   const seen = new Set<string>();

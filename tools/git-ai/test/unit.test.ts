@@ -13,6 +13,8 @@ import { writeFile, readFile, access, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Snapshot } from '../src/git.ts';
 import type { Adapter } from '../src/providers.ts';
+import { modelChoices } from '../src/ollama-models.ts';
+import { codexModels } from '../src/codex-models.ts';
 
 const signal = () => new AbortController().signal;
 const snapshot: Snapshot = { tree: 'tree', history: ['chore: historical example'], changes: [{
@@ -29,10 +31,46 @@ test('CLI accepts scoped options and rejects all unsupported Git flags and paths
     assert.throws(() => parseArgs(args));
 });
 
+test('model picker arguments default to global and reject ambiguous or unrelated overrides', () => {
+  assert.deepEqual(parseArgs(['ollama', 'models']), { command: 'ollama-models', options: {}, scope: 'global' });
+  assert.equal(parseArgs(['ollama', 'models', '--local']).scope, 'local');
+  assert.equal(parseArgs(['ollama', 'models', '--global']).scope, 'global');
+  assert.deepEqual(parseArgs(['codex', 'models']), { command: 'codex-models', options: {}, scope: 'global' });
+  assert.equal(parseArgs(['codex', 'models', '--local']).scope, 'local');
+  for (const args of [['ollama'], ['ollama', 'other'], ['ollama', 'models', '--global', '--local'], ['ollama', 'models', '--provider', 'ollama'], ['ollama', 'models', '--dry-run'], ['codex', 'models', '--all'], ['codex', 'models', '--local', '--global']])
+    assert.throws(() => parseArgs(args));
+});
+
+test('Codex catalog exposes visible identifiers/efforts without instruction templates or guessed defaults', () => {
+  assert.deepEqual(codexModels({ models: [
+    { slug: 'literal;$(touch BAD)', visibility: 'list', supported_reasoning_levels: [{ effort: 'low' }], base_instructions: 'PRIVATE' },
+    { slug: 'hidden', visibility: 'hide' },
+  ] }), [{ name: 'literal;$(touch BAD)', remote: true, efforts: ['low'] }]);
+  for (const data of [{}, { models: [null] }, { models: [{ slug: 'bad\nname', visibility: 'list' }] },
+    { models: [{ slug: 'm', visibility: 'list', supported_reasoning_levels: 'low' }] }]) assert.throws(() => codexModels(data));
+});
+
+test('model choices mark and prioritise current selection, deduplicate, and label remote models', () => {
+  const choices = modelChoices({ models: [
+    { name: 'a-model' }, { name: 'z-model' }, { name: 'a-model', remote_host: 'remote' },
+    { model: 'literal;$(touch BAD)' },
+  ] }, 'z-model');
+  assert.equal(choices.length, 3);
+  assert.equal(choices[0].model.name, 'z-model');
+  assert.match(choices[0].label, /current default/);
+  assert.ok(choices.some(choice => choice.model.name === 'a-model' && choice.model.remote));
+  assert.deepEqual(modelChoices({ models: [] }), []);
+  assert.ok(modelChoices({ models: [{ name: 'other' }] }, 'missing').every(choice => !choice.label.includes('current default')));
+  for (const bad of [{}, { models: null }, { models: [null] }, { models: [{ name: 'bad\nname' }] }, { models: [{ name: '\x1b[31mred' }] }, { models: [{ name: ' ' }] }])
+    assert.throws(() => modelChoices(bad));
+});
+
 test('Git config defaults, effective includes, CLI overrides and booleans', async t => {
   const directory = await fixture(t);
   assert.deepEqual((await loadConfig({}, directory)).providers, ['apple', 'ollama', 'codex', 'claude']);
   assert.equal((await loadConfig({}, directory)).allowCloud, false);
+  assert.equal((await loadConfig({}, directory)).contextFallback, 'ask');
+  assert.equal((await loadConfig({ provider: 'apple' }, directory)).pinned, true);
   const included = join(directory, 'included-config');
   await writeFile(included, '[ai]\nallowCloud = yes\nproviders = ollama, apple\n[ai "ollama"]\nmodel = local-id\n');
   git(directory, 'config', 'include.path', included);
@@ -53,6 +91,7 @@ test('malformed settings fail with their key and do not silently disappear in fa
     ['ai.commit.subjectMaxLength', '0'], ['ai.ollama.endpoint', 'http://user:secret@localhost'],
     ['ai.apple.model', 'cloud'], ['ai.apple.reasoningEffort', 'low'], ['ai.ollama.reasoningEffort', 'low'],
     ['ai.codex.reasoningEffort', 'turbo'], ['ai.claude.reasoningEffort', 'turbo'], ['ai.codex.model', ''],
+    ['ai.commit.contextFallback', 'yes'],
   ]) {
     git(directory, 'config', key, value);
     await assert.rejects(loadConfig({}, directory), error => error instanceof Failure && error.kind === 'configuration-invalid' && error.message.includes(key));
@@ -200,25 +239,25 @@ test('unconfigured providers give actionable errors', async () => {
   await assert.rejects(createAdapter('ollama', config()).probe(signal()), (e: any) => e.kind === 'model-not-configured');
 });
 
-test('CLI adapters only probe versions in an isolated directory and never receive payloads', async t => {
+test('disabled Claude adapter only probes its version in an isolated directory', async t => {
   const directory = await fixture(t);
   const bin = join(directory, 'fake-bin');
   await mkdir(bin);
   const log = join(directory, 'probe-log');
-  for (const name of ['codex', 'claude'])
+  for (const name of ['claude'])
     await writeFile(join(bin, name), '#!/bin/sh\nprintf "%s|%s\\n" "$PWD" "$*" >> "$PROBE_LOG"\nprintf "fake-cli 1.0\\n"\n', { mode: 0o700 });
   const oldPath = process.env.PATH;
   const oldLog = process.env.PROBE_LOG;
   process.env.PATH = `${bin}:${oldPath}`;
   process.env.PROBE_LOG = log;
   try {
-    for (const name of ['codex', 'claude'] as const) {
+    for (const name of ['claude'] as const) {
       const adapter = createAdapter(name, config({ allowCloud: true, models: { [name]: 'explicit-model' }, efforts: { [name]: 'low' } }));
       await assert.rejects(adapter.probe(signal()), (e: any) => e.kind === 'unavailable' && /disabled/.test(e.message));
       await assert.rejects(adapter.generate('SECRET-PAYLOAD', signal()), /disabled/);
     }
     const lines = (await readFile(log, 'utf8')).trim().split('\n');
-    assert.equal(lines.length, 2);
+    assert.equal(lines.length, 1);
     for (const line of lines) {
       const [cwd, args] = line.split('|');
       assert.ok(!cwd.startsWith(directory));

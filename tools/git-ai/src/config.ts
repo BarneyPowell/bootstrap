@@ -6,6 +6,7 @@ export type ProviderName = typeof providers[number];
 export type Overrides = { provider?: ProviderName; model?: string; reasoningEffort?: string; dryRun?: boolean };
 export type Config = {
   providers: ProviderName[]; allowCloud: boolean; timeoutSeconds: number;
+  contextFallback: 'ask' | 'auto' | 'never'; pinned: boolean;
   recentCount: number; subjectMaxLength: number; endpoint: string;
   models: Partial<Record<ProviderName, string>>;
   efforts: Partial<Record<ProviderName, string>>;
@@ -38,6 +39,9 @@ export async function loadConfig(overrides: Overrides = {}, cwd?: string, signal
   if (list.some(p => !providers.includes(p as ProviderName)) || new Set(list).size !== list.length)
     invalid('ai.providers', 'expected a non-empty, comma-separated list of unique apple, ollama, codex, claude providers.');
   const allowCloud = (await read('ai.allowCloud', true)) === 'true';
+  const contextFallback = (await read('ai.commit.contextFallback')) ?? 'ask';
+  if (!['ask', 'auto', 'never'].includes(contextFallback))
+    invalid('ai.commit.contextFallback', 'expected ask, auto, or never.');
   const timeoutSeconds = await integer('ai.timeoutSeconds', 30, 1, 3600);
   const recentCount = await integer('ai.commit.recentCount', 8, 0, 100);
   const subjectMaxLength = await integer('ai.commit.subjectMaxLength', 72, 1, 1000);
@@ -64,5 +68,6 @@ export async function loadConfig(overrides: Overrides = {}, cwd?: string, signal
   if (overrides.provider && overrides.provider !== 'apple' && !models[overrides.provider])
     invalid(`ai.${overrides.provider}.model`, 'a pinned provider requires an explicit model; set this key or pass --model <id>.');
   return { providers: overrides.provider ? [overrides.provider] : list as ProviderName[], allowCloud, timeoutSeconds,
+    contextFallback: contextFallback as Config['contextFallback'], pinned: !!overrides.provider,
     recentCount, subjectMaxLength, endpoint: url.origin, models, efforts, origins };
 }

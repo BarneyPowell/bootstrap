@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { run } from './process.ts';
 import type { Config, ProviderName } from './config.ts';
 import { Failure, cancelled } from './errors.ts';
+import { createCodexAdapter } from './codex.ts';
 
 export type Capabilities = { model: string; locality: 'local' | 'remote'; inputBytes: number; detail: string };
 export interface Adapter {
@@ -86,6 +87,7 @@ export async function httpJSON(endpoint: string, path: string, body: unknown, si
 }
 
 export function createAdapter(name: ProviderName, config: Config): Adapter {
+  if (name === 'codex') return createCodexAdapter(config);
   const model = config.models[name] ?? (name === 'apple' ? 'system' : '');
   let context = 0;
   let locality: Capabilities['locality'] = name === 'apple' || (name === 'ollama' && isLoopback(config.endpoint)) ? 'local' : 'remote';
@@ -116,7 +118,6 @@ export function createAdapter(name: ProviderName, config: Config): Adapter {
       // These CLIs are agents. Do not send a prompt until all side effects can be
       // disabled through a supported interface, including policy-level hooks.
       await executableVersion(name, signal);
-      if (name === 'codex') throw new Failure('unavailable', 'Codex CLI adapter disabled: verified exec interface does not establish complete text-only operation without tools/plugins/hooks. No content sent; authentication/model access unverified.');
       throw new Failure('unavailable', 'Claude Code adapter disabled: --tools "" and --safe-mode still permit policy-configured hooks. No content sent; authentication/model access unverified.');
     },
     async generate(prompt, signal) {

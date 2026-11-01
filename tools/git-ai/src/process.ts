@@ -3,31 +3,33 @@ import { Failure, cancelled } from './errors.ts';
 
 export type RunOptions = {
   cwd?: string; env?: NodeJS.ProcessEnv; input?: string; signal?: AbortSignal;
-  timeoutMs?: number; limit?: number; excerpt?: boolean; inherit?: boolean;
+  timeoutMs?: number; limit?: number; excerpt?: boolean; inherit?: boolean; interactive?: boolean;
 };
 export type Result = { code: number; stdout: string; stderr: string; truncated: boolean };
 
-// Each captured child owns a process group: deadlines/cancellation kill descendants too.
+// Background children own process groups for cancellation; terminal children
+// stay in the terminal's group so interactive input and signals work normally.
 export async function run(executable: string, args: string[], options: RunOptions = {}): Promise<Result> {
   cancelled(options.signal);
   return await new Promise((resolve, reject) => {
     const child = spawn(executable, args, {
       cwd: options.cwd, env: options.env, shell: false,
-      detached: !options.inherit && process.platform !== 'win32',
-      stdio: options.inherit ? 'inherit' : ['pipe', 'pipe', 'pipe'],
+      detached: !options.inherit && !options.interactive && process.platform !== 'win32',
+      stdio: options.inherit ? 'inherit' : options.interactive ? ['inherit', 'pipe', 'inherit'] : ['pipe', 'pipe', 'pipe'],
     });
     let failure: Failure | undefined;
     let stdout = Buffer.alloc(0), stderr = Buffer.alloc(0), truncated = false;
     const stop = () => {
-      try { process.kill(options.inherit || process.platform === 'win32' ? child.pid! : -child.pid!, 'SIGKILL'); } catch { /* already exited */ }
+      try { process.kill(options.inherit || options.interactive || process.platform === 'win32' ? child.pid! : -child.pid!, 'SIGKILL'); } catch { /* already exited */ }
     };
     const abort = () => { failure = new Failure('cancelled', 'Cancelled.'); stop(); };
-    const timer = setTimeout(() => {
+    // A terminal picker waits for the user; timeoutMs=0 disables the deadline.
+    const timer = options.timeoutMs === 0 ? undefined : setTimeout(() => {
       failure = new Failure('timeout', 'Process deadline exceeded.'); stop();
     }, options.timeoutMs ?? 30_000);
     options.signal?.addEventListener('abort', abort, { once: true });
     if (options.signal?.aborted) abort();
-    const finish = () => { clearTimeout(timer); options.signal?.removeEventListener('abort', abort); };
+    const finish = () => { if (timer) clearTimeout(timer); options.signal?.removeEventListener('abort', abort); };
     child.on('error', (error: NodeJS.ErrnoException) => {
       finish(); reject(new Failure(error.code === 'ENOENT' ? 'not-installed' : 'unavailable', `Cannot start ${executable.split('/').at(-1)}.`));
     });

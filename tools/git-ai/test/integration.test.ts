@@ -10,21 +10,21 @@ import { tmpdir } from 'node:os';
 import { Git } from '../src/git.ts';
 import { commit } from '../src/commit.ts';
 import { run } from '../src/process.ts';
-import { fixture, git, stage } from './helpers.ts';
+import { fixture, git, stage, fakeCodex } from './helpers.ts';
 
 const root = fileURLToPath(new URL('../../..', import.meta.url));
 const entry = join(root, 'scripts/git/git-ai');
 const tty = fileURLToPath(new URL('./pty_driver.py', import.meta.url));
 const message = 'feat: add staged behavior';
 
-async function service(t: any, directory: string, onGenerate?: (prompt: string) => void | 'hold') {
+async function service(t: any, directory: string, onGenerate?: (prompt: string) => void | 'hold', models = [{ name: 'test-model' }]) {
   const prompts: string[] = [];
   const server = createServer(async (request, response) => {
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);
     const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {};
     let data;
-    if (request.url === '/api/tags') data = { models: [{ name: 'test-model' }] };
+    if (request.url === '/api/tags') data = { models };
     else if (request.url === '/api/show') data = { model_info: { 'general.architecture': 'test', 'test.context_length': 32768 } };
     else {
       prompts.push(body.prompt);
@@ -299,3 +299,326 @@ test('doctor outside repository sends no generation and reports policy; all-prov
   assert.match(failure.stderr, /codex: privacy-blocked/);
   assert.match(failure.stderr, /claude: privacy-blocked/);
 });
+
+async function pickerFixture(t: any, models = [{ name: 'test-model' }, { name: 'other-model' }]) {
+  const directory = await fixture(t);
+  const prompts = await service(t, directory, undefined, models);
+  const bin = join(directory, 'fake-bin');
+  await mkdir(bin);
+  await symlink(process.execPath, join(bin, 'node'));
+  await writeFile(join(bin, 'ollama'), '#!/bin/sh\necho "ollama version fake"\n', { mode: 0o700 });
+  await writeFile(join(bin, 'gum'), `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === '--version') { console.log('gum version fake'); process.exit(0); }
+fs.writeFileSync(process.env.PICKER_LOG, JSON.stringify({ args, stdinTTY: process.stdin.isTTY, stderrTTY: process.stderr.isTTY }));
+if (process.env.PICKER_MODE === 'cancel') process.exit(130);
+if (process.env.PICKER_MODE === 'fail') process.exit(2);
+if (process.env.PICKER_MODE === 'invalid') { console.log('not-in-the-list'); process.exit(0); }
+const choices = args.slice(args.indexOf('--') + 1);
+console.log(choices[Number(process.env.PICKER_INDEX || '1')]);
+`, { mode: 0o700 });
+  const globalFile = join(directory, 'global-config');
+  const log = join(directory, 'picker-log');
+  await writeFile(globalFile, '[ai]\nproviders = apple,claude\n[ai "ollama"]\nmodel = test-model\n');
+  const env = { PATH: `${bin}:/usr/bin:/bin`, GIT_CONFIG_GLOBAL: globalFile, PICKER_LOG: log };
+  return { directory, bin, prompts, globalFile, log, env };
+}
+
+test('gum picker saves only global model, marks current default, and reports local precedence', async t => {
+  const { directory, env, globalFile, log, prompts } = await pickerFixture(t);
+  git(directory, 'config', 'ai.ollama.model', 'repository-model');
+  const result = await cli(directory, ['ollama', 'models'], env, true);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const saved = await run('git', ['config', '--global', '--get', 'ai.ollama.model'], { cwd: directory, env: { ...process.env, ...env } });
+  assert.equal(saved.stdout, 'other-model\n');
+  const global = await readFile(globalFile, 'utf8');
+  assert.match(global, /providers = apple,claude/);
+  assert.equal(git(directory, 'config', '--local', '--get', 'ai.providers'), 'ollama');
+  assert.equal(git(directory, 'config', '--local', '--get', 'ai.ollama.model'), 'repository-model');
+  const gum = JSON.parse(await readFile(log, 'utf8'));
+  assert.equal(gum.stdinTTY, true);
+  assert.equal(gum.stderrTTY, true);
+  assert.match(gum.args[gum.args.indexOf('--') + 1], /test-model.*current default/);
+  assert.ok(gum.args.some((arg: string) => arg.includes('Current global: test-model')));
+  assert.match(result.stdout, /Effective model here remains repository-model/);
+  assert.equal(prompts.length, 0);
+});
+
+test('explicit local model selection leaves global defaults and provider order untouched', async t => {
+  const { directory, env, globalFile } = await pickerFixture(t);
+  const before = await readFile(globalFile, 'utf8');
+  const result = await cli(directory, ['ollama', 'models', '--local'], env, true);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.equal(git(directory, 'config', 'ai.ollama.model'), 'other-model');
+  assert.equal(git(directory, 'config', 'ai.providers'), 'ollama');
+  assert.equal(await readFile(globalFile, 'utf8'), before);
+});
+
+for (const mode of ['cancel', 'fail', 'invalid']) {
+  test(`model picker ${mode} leaves configuration unchanged`, async t => {
+    const { directory, env, globalFile } = await pickerFixture(t);
+    const before = await readFile(globalFile, 'utf8');
+    const result = await cli(directory, ['ollama', 'models'], { ...env, PICKER_MODE: mode }, true);
+    assert.equal(result.code, mode === 'cancel' ? 130 : 1, result.stdout + result.stderr);
+    assert.equal(await readFile(globalFile, 'utf8'), before);
+    assert.equal(git(directory, 'config', 'ai.ollama.model'), 'test-model');
+  });
+}
+
+test('global picker works outside a repository with no prior model and literal shell metacharacters', async t => {
+  const hostile = 'literal;$(touch BAD)';
+  const { directory, env, globalFile, log } = await pickerFixture(t, [{ name: hostile }]);
+  const endpoint = git(directory, 'config', 'ai.ollama.endpoint');
+  await writeFile(globalFile, `[ai "ollama"]\nendpoint = ${endpoint}\n`);
+  const result = await cli('/', ['ollama', 'models'], { ...env, PICKER_INDEX: '0' }, true);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const saved = await run('git', ['config', '--global', '--get', 'ai.ollama.model'], { env: { ...process.env, ...env } });
+  assert.equal(saved.stdout, hostile + '\n');
+  const gum = JSON.parse(await readFile(log, 'utf8'));
+  assert.ok(gum.args.some((arg: string) => arg.includes('Current global: (not set)')));
+  assert.ok(!(await readdir(directory)).includes('BAD'));
+});
+
+test('picker lists an absent saved default and preserves it until a replacement is chosen', async t => {
+  const { directory, env, globalFile, log } = await pickerFixture(t, [{ name: 'replacement' }]);
+  const result = await cli(directory, ['ollama', 'models'], { ...env, PICKER_INDEX: '0' }, true);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const gum = JSON.parse(await readFile(log, 'utf8'));
+  assert.ok(gum.args.some((arg: string) => arg.includes('not available on this service')));
+  assert.match(await readFile(globalFile, 'utf8'), /model = replacement/);
+});
+
+for (const dependency of ['gum', 'ollama']) {
+  test(`missing ${dependency} produces setup guidance without writes`, async t => {
+    const { directory, bin, env, globalFile } = await pickerFixture(t);
+    await unlink(join(bin, dependency));
+    const before = await readFile(globalFile, 'utf8');
+    const result = await cli(directory, ['ollama', 'models'], env, true);
+    assert.equal(result.code, 1);
+    assert.match(result.stdout, new RegExp(`${dependency} is unavailable|${dependency === 'gum' ? 'make ensure-gum' : 'Install Ollama'}`));
+    assert.equal(await readFile(globalFile, 'utf8'), before);
+  });
+}
+
+test('empty model list, unavailable service, non-TTY, and blocked remote endpoint do not save config', async t => {
+  const { directory, env, globalFile } = await pickerFixture(t, []);
+  const before = await readFile(globalFile, 'utf8');
+  let result = await cli(directory, ['ollama', 'models'], env, true);
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /no installed models/);
+  result = await cli(directory, ['ollama', 'models'], env);
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /interactive terminal/);
+  git(directory, 'config', 'ai.ollama.endpoint', 'http://127.0.0.1:1');
+  result = await cli(directory, ['ollama', 'models'], env, true);
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /connection failed/);
+  git(directory, 'config', 'ai.ollama.endpoint', 'https://remote.example.invalid');
+  result = await cli(directory, ['ollama', 'models'], env, true);
+  assert.equal(result.code, 1);
+  assert.match(result.stdout, /privacy-blocked/);
+  assert.equal(await readFile(globalFile, 'utf8'), before);
+  assert.ok(!(await readdir(directory)).includes('picker-log'));
+});
+
+async function contextFixture(t: any) {
+  const directory = await fixture(t);
+  for (let i = 0; i < 20; i++) await stage(directory, `file-${i}.txt`, `staged change ${i}\n`);
+  git(directory, 'config', 'ai.providers', 'apple');
+  git(directory, 'config', 'ai.allowCloud', 'true');
+  git(directory, 'config', 'ai.codex.model', 'explicit-model');
+  git(directory, 'config', 'ai.codex.reasoningEffort', 'low');
+  const codex = await fakeCodex(directory);
+  const bin = join(directory, 'context-bin');
+  await mkdir(bin);
+  await writeFile(join(bin, 'fm'), '#!/bin/sh\ncase "$1" in\nconfig) echo "(none)" ;;\nmodels) echo "✓ system (fake model)" ;;\n*) echo "Unexpected Apple inference" >&2; exit 3 ;;\nesac\n', { mode: 0o700 });
+  const gumLog = join(directory, 'gum-confirm-log');
+  await writeFile(join(bin, 'gum'), `#!/usr/bin/env node
+const fs = require('node:fs');
+fs.appendFileSync(process.env.FAKE_GUM_LOG, JSON.stringify({args:process.argv.slice(2),tty:process.stdin.isTTY}) + '\\n');
+process.exit(Number(process.env.FAKE_GUM_CODE || '0'));
+`, { mode: 0o700 });
+  const env = { ...codex, PATH: `${bin}:${codex.PATH}`, FAKE_GUM_LOG: gumLog };
+  const tree = git(directory, 'write-tree');
+  return { directory, env, gumLog, tree };
+}
+
+test('oversized context prompts with gum, then Codex receives only staged prepared evidence', async t => {
+  const { directory, env, gumLog, tree } = await contextFixture(t);
+  await writeFile(join(directory, 'untracked-secret'), 'NEVER-SEND-THIS');
+  await writeFile(join(directory, 'file-0.txt'), 'UNSTAGED-SECRET');
+  const result = await cli(directory, ['commit', '--dry-run'], env, true);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /chore: describe staged changes/);
+  const gum = JSON.parse((await readFile(gumLog, 'utf8')).trim());
+  assert.equal(gum.tty, true);
+  assert.ok(gum.args.includes('--default=false'));
+  assert.match(gum.args.at(-1), /Send the prepared staged diff/);
+  const record = JSON.parse((await readFile(env.FAKE_CODEX_LOG!, 'utf8')).trim());
+  assert.match(record.input, /staged change 0/);
+  assert.doesNotMatch(record.input, /NEVER-SEND-THIS|UNSTAGED-SECRET/);
+  assert.ok(!record.cwd.startsWith(directory));
+  assert.equal(git(directory, 'write-tree'), tree);
+  assert.throws(() => git(directory, 'rev-parse', '--verify', 'HEAD'));
+});
+
+test('automatic context fallback works without a terminal or gum interaction and keeps stdout message-only', async t => {
+  const { directory, env, gumLog } = await contextFixture(t);
+  git(directory, 'config', 'ai.commit.contextFallback', 'auto');
+  const result = await cli(directory, ['commit', '--dry-run'], env);
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.stdout, 'chore: describe staged changes\n');
+  assert.match(result.stderr, /automatically trying Codex/);
+  assert.ok(!(await readdir(directory)).includes('gum-confirm-log'));
+});
+
+for (const code of ['1', '130']) {
+  test(`gum context confirmation exit ${code} stops without sending to Codex`, async t => {
+    const { directory, env } = await contextFixture(t);
+    const result = await cli(directory, ['commit', '--dry-run'], { ...env, FAKE_GUM_CODE: code }, true);
+    assert.equal(result.code, 130, result.stdout + result.stderr);
+    assert.ok(!(await readdir(directory)).includes('codex-log'));
+  });
+}
+
+test('context ask without a terminal fails with policy guidance rather than sending', async t => {
+  const { directory, env } = await contextFixture(t);
+  const result = await cli(directory, ['commit', '--dry-run'], env);
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /terminal to ask/);
+  assert.ok(!(await readdir(directory)).includes('codex-log'));
+});
+
+for (const mode of ['never', 'pinned', 'cloud-blocked', 'model-missing']) {
+  test(`context fallback respects ${mode} without prompting or sending`, async t => {
+    const { directory, env } = await contextFixture(t);
+    if (mode === 'never') git(directory, 'config', 'ai.commit.contextFallback', 'never');
+    if (mode === 'cloud-blocked') git(directory, 'config', 'ai.allowCloud', 'false');
+    if (mode === 'model-missing') git(directory, 'config', '--unset', 'ai.codex.model');
+    const args = ['commit', '--dry-run', ...(mode === 'pinned' ? ['--provider', 'apple'] : [])];
+    const result = await cli(directory, args, env, true);
+    assert.equal(result.code, 1, result.stdout + result.stderr);
+    assert.ok(!(await readdir(directory)).includes('codex-log'));
+    assert.ok(!(await readdir(directory)).includes('gum-confirm-log'));
+  });
+}
+
+test('Codex malformed output is repaired once without repeating escalation approval', async t => {
+  const { directory, env, gumLog } = await contextFixture(t);
+  const result = await cli(directory, ['commit', '--dry-run'], { ...env, FAKE_CODEX_MODE: 'invalid' }, true);
+  assert.equal(result.code, 1);
+  assert.equal((await readFile(gumLog, 'utf8')).trim().split('\n').length, 1);
+  const records = (await readFile(env.FAKE_CODEX_LOG!, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  assert.equal(records.length, 2);
+  assert.match(records[1].input, /REPAIR/);
+  for (const record of records) assert.ok(!(await readdir(tmpdir())).includes(record.cwd.split('/').at(-1)));
+});
+
+test('Codex context fallback timeout cleans temporary resources and returns without retrying', async t => {
+  const { directory, env } = await contextFixture(t);
+  git(directory, 'config', 'ai.commit.contextFallback', 'auto');
+  git(directory, 'config', 'ai.timeoutSeconds', '1');
+  const result = await cli(directory, ['commit', '--dry-run'], { ...env, FAKE_CODEX_MODE: 'timeout' });
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /deadline/);
+  const records = (await readFile(env.FAKE_CODEX_LOG!, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  assert.equal(records.length, 1);
+  for (const record of records) assert.ok(!(await readdir(tmpdir())).includes(record.cwd.split('/').at(-1)));
+});
+
+test('Codex planning metadata does not reject a valid dry-run final message or leak into output', async t => {
+  const { directory, env } = await contextFixture(t);
+  git(directory, 'config', 'ai.commit.contextFallback', 'auto');
+  const result = await cli(directory, ['commit', '--dry-run'], { ...env, FAKE_CODEX_MODE: 'plan' });
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.stdout, 'chore: describe staged changes\n');
+  assert.doesNotMatch(result.stderr, /PRIVATE PLAN|PROTOCOL TEXT/);
+});
+
+test('Codex non-fatal error item followed by successful turn completion keeps the valid final message', async t => {
+  const { directory, env } = await contextFixture(t);
+  git(directory, 'config', 'ai.commit.contextFallback', 'auto');
+  const result = await cli(directory, ['commit', '--dry-run'], { ...env, FAKE_CODEX_MODE: 'warning' });
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.stdout, 'chore: describe staged changes\n');
+  assert.doesNotMatch(result.stderr, /PRIVATE WARNING|PROTOCOL TEXT/);
+});
+
+test('Codex incomplete turn does not use a populated final message file', async t => {
+  const { directory, env } = await contextFixture(t);
+  git(directory, 'config', 'ai.commit.contextFallback', 'auto');
+  const result = await cli(directory, ['commit', '--dry-run'], { ...env, FAKE_CODEX_MODE: 'incomplete' });
+  assert.equal(result.code, 1);
+  assert.equal(result.stdout, '');
+});
+
+async function codexPickerFixture(t: any) {
+  const base = await pickerFixture(t);
+  const codex = await fakeCodex(base.directory);
+  const endpoint = git(base.directory, 'config', 'ai.ollama.endpoint');
+  await writeFile(base.globalFile, '[ai]\nproviders = apple,ollama\nallowCloud = false\n[ai "codex"]\nmodel = model-z\nreasoningEffort = low\n[ai "ollama"]\nmodel = ollama-unchanged\n');
+  const catalogLog = join(base.directory, 'catalog-log');
+  // Keep fake gum first while resolving Codex from its own fake bin.
+  return { ...base, catalogLog, endpoint, env: { ...base.env, PATH: `${base.bin}:${codex.PATH}`, FAKE_CATALOG_LOG: catalogLog, FAKE_CODEX_LOG: codex.FAKE_CODEX_LOG } };
+}
+
+test('Codex gum picker saves only its global model, marks current, and lists offline when cloud is blocked', async t => {
+  const { directory, env, globalFile, log, catalogLog } = await codexPickerFixture(t);
+  const result = await cli(directory, ['codex', 'models'], env, true);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const saved = await readFile(globalFile, 'utf8');
+  assert.match(saved, /model = model-a/);
+  assert.match(saved, /providers = apple,ollama/);
+  assert.match(saved, /reasoningEffort = low/);
+  assert.match(saved, /model = ollama-unchanged/);
+  assert.match(saved, /allowCloud = false/);
+  const gum = JSON.parse(await readFile(log, 'utf8'));
+  assert.match(gum.args[gum.args.indexOf('--') + 1], /model-z.*current default/);
+  assert.ok(gum.args.every((arg: string) => !arg.includes('hidden-model') && !arg.includes('PRIVATE MODEL')));
+  const catalog = JSON.parse(await readFile(catalogLog, 'utf8'));
+  assert.ok(catalog.args.includes('--bundled'));
+  assert.ok(!catalog.cwd.startsWith(directory));
+  assert.ok(!(await readdir(tmpdir())).includes(catalog.cwd.split('/').at(-1)));
+  assert.ok(!(await readdir(directory)).includes('codex-log'));
+  assert.match(result.stdout, /Account access is not verified/);
+});
+
+test('Codex picker refreshes catalog with cloud allowed and respects explicit local write scope', async t => {
+  const { directory, env, globalFile, catalogLog } = await codexPickerFixture(t);
+  git(directory, 'config', 'ai.allowCloud', 'true');
+  git(directory, 'config', 'ai.codex.model', 'model-z');
+  const before = await readFile(globalFile, 'utf8');
+  const result = await cli(directory, ['codex', 'models', '--local'], env, true);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.equal(git(directory, 'config', 'ai.codex.model'), 'model-a');
+  assert.equal(await readFile(globalFile, 'utf8'), before);
+  assert.ok(!JSON.parse(await readFile(catalogLog, 'utf8')).args.includes('--bundled'));
+});
+
+test('Codex picker cancellation preserves the model and reports incompatible existing effort after explicit save', async t => {
+  const { directory, env, globalFile } = await codexPickerFixture(t);
+  const before = await readFile(globalFile, 'utf8');
+  const cancelled = await cli(directory, ['codex', 'models'], { ...env, PICKER_MODE: 'cancel' }, true);
+  assert.equal(cancelled.code, 130);
+  assert.equal(await readFile(globalFile, 'utf8'), before);
+  // Keep model-z, whose test metadata only lists high, while leaving low alone.
+  const saved = await cli(directory, ['codex', 'models'], { ...env, PICKER_INDEX: '0' }, true);
+  assert.equal(saved.code, 0, saved.stdout + saved.stderr);
+  assert.match(saved.stdout, /reasoningEffort was left unchanged/);
+  assert.match(await readFile(globalFile, 'utf8'), /reasoningEffort = low/);
+});
+
+for (const mode of ['error', 'invalid', 'empty', 'timeout']) {
+  test(`Codex catalog ${mode} leaves config unchanged and suppresses raw catalog/log output`, async t => {
+    const { directory, env, globalFile, catalogLog } = await codexPickerFixture(t);
+    git(directory, 'config', 'ai.timeoutSeconds', '1');
+    const before = await readFile(globalFile, 'utf8');
+    const result = await cli(directory, ['codex', 'models'], { ...env, FAKE_CATALOG_MODE: mode }, true);
+    assert.equal(result.code, 1, result.stdout + result.stderr);
+    assert.equal(await readFile(globalFile, 'utf8'), before);
+    assert.doesNotMatch(result.stdout + result.stderr, /PRIVATE/);
+    const catalog = JSON.parse(await readFile(catalogLog, 'utf8'));
+    assert.ok(!(await readdir(tmpdir())).includes(catalog.cwd.split('/').at(-1)));
+  });
+}

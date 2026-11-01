@@ -5,17 +5,37 @@ import type { Adapter } from './providers.ts';
 import { Failure, cancelled, diagnostic } from './errors.ts';
 import { prepare } from './prompt.ts';
 import { validateMessage } from './validation.ts';
+import { confirmContextFallback } from './context-fallback.ts';
+import type { ContextDecision } from './context-fallback.ts';
 
 export async function generate(snapshot: Snapshot, config: Config, signal: AbortSignal,
   report: (line: string) => void,
   factory: (name: ProviderName, config: Config) => Adapter = createAdapter,
-  validateCleanup: (message: string) => Promise<void> = async () => {}): Promise<string> {
+  validateCleanup: (message: string) => Promise<void> = async () => {},
+  decide: ContextDecision = confirmContextFallback): Promise<string> {
   const failures: string[] = [];
-  for (const name of config.providers) {
+  const contextLimited = new Set<ProviderName>();
+  const candidates = [...config.providers];
+  if (!config.pinned && config.contextFallback !== 'never' && !candidates.includes('codex')) candidates.push('codex');
+  for (const name of candidates) {
     cancelled(signal);
-    const deadline = AbortSignal.timeout(config.timeoutSeconds * 1000);
-    const providerSignal = AbortSignal.any([signal, deadline]);
+    if (name === 'codex' && !config.providers.includes('codex') && contextLimited.size === 0) continue;
+    let deadline: AbortSignal | undefined;
     try {
+      if (name === 'codex' && contextLimited.size > 0 && !config.pinned) {
+        if (config.contextFallback === 'never') {
+          report('Context fallback to Codex is disabled by ai.commit.contextFallback=never.');
+          continue;
+        }
+        if (!config.allowCloud) throw new Failure('privacy-blocked', 'Context fallback to Codex requires ai.allowCloud=true; cloud policy is unchanged.');
+        if (!config.models.codex) throw new Failure('model-not-configured', 'Set ai.codex.model to an explicit model before using context fallback.');
+        report(`${[...contextLimited].join(', ')} context is too small; ${config.contextFallback === 'auto' ? 'automatically trying' : 'offering'} Codex (${diagnostic(config.models.codex)}, remote).`);
+        if (config.contextFallback === 'ask' && !await decide(config, [...contextLimited], signal))
+          throw new Failure('cancelled', 'Codex fallback declined; no Codex request was sent.');
+      }
+      // Human decision time does not consume the provider's execution deadline.
+      deadline = AbortSignal.timeout(config.timeoutSeconds * 1000);
+      const providerSignal = AbortSignal.any([signal, deadline]);
       const adapter = factory(name, config);
       const capabilities = await adapter.probe(providerSignal);
       // Enforce policy in orchestration as well as the adapter, including mocks.
@@ -42,8 +62,9 @@ export async function generate(snapshot: Snapshot, config: Config, signal: Abort
       }
     } catch (error) {
       cancelled(signal);
-      const failure = deadline.aborted ? new Failure('timeout', 'Provider deadline exceeded.') : error instanceof Failure ? error : new Failure('transport/service-error', 'Provider failed; raw diagnostics suppressed.');
+      const failure = deadline?.aborted ? new Failure('timeout', 'Provider deadline exceeded.') : error instanceof Failure ? error : new Failure('transport/service-error', 'Provider failed; raw diagnostics suppressed.');
       if (failure.kind === 'configuration-invalid' || failure.kind === 'cancelled') throw failure;
+      if (failure.kind === 'context-too-large' && (name === 'apple' || name === 'ollama')) contextLimited.add(name);
       const summary = `${name}: ${failure.kind}: ${diagnostic(failure.message)}`;
       report(summary);
       failures.push(summary);

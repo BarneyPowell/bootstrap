@@ -69,6 +69,11 @@ without being overwritten; move them aside before retrying.
 message for staged changes and opens Git's editor for review. See the
 [git-ai guide](tools/git-ai/README.md) for runtime/build requirements, providers,
 configuration, privacy, tests, and editor acceptance/abort behaviour.
+Use `git ai ollama models` for a gum picker that saves your global default
+Ollama model without changing provider order.
+`git ai codex models` does the same for the explicit `ai.codex.model` default.
+When local context is too small, `ai.commit.contextFallback` can ask through gum
+or automatically try Codex, subject to cloud permission and an explicit model.
 
 ### Legacy installer usage
 
