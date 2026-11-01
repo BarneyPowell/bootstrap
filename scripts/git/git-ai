@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Resolve the installed symlink back to this clone, including relative links.
+source_path="${BASH_SOURCE[0]}"
+while [[ -L "$source_path" ]]; do
+  source_dir="$(cd -- "$(dirname -- "$source_path")" && pwd -P)"
+  source_path="$(readlink "$source_path")"
+  [[ "$source_path" = /* ]] || source_path="$source_dir/$source_path"
+done
+repo_dir="$(cd -- "$(dirname -- "$source_path")/../.." && pwd -P)"
+if ! command -v node >/dev/null 2>&1; then
+  printf 'git-ai requires Node.js 22.18 or later.\n' >&2
+  exit 1
+fi
+node -e 'const [major, minor] = process.versions.node.split(".").map(Number); if (major < 22 || (major === 22 && minor < 18) || major === 23) process.exit(1)' || {
+  printf 'git-ai requires Node.js 22.18 or later (24 LTS recommended).\n' >&2
+  exit 1
+}
+exec node "$repo_dir/tools/git-ai/src/cli.ts" "$@"
