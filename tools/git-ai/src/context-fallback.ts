@@ -1,6 +1,6 @@
 import type { Config, ProviderName } from './config.ts';
-import { run } from './process.ts';
-import { Failure, cancelled, diagnostic } from './errors.ts';
+import { run } from '../../shared/src/process.ts';
+import { Failure, cancelled, diagnostic } from '../../shared/src/errors.ts';
 
 export type ContextDecision = (config: Config, failed: ProviderName[], signal: AbortSignal) => Promise<boolean>;
 

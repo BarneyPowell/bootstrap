@@ -76,6 +76,18 @@ Ollama model without changing provider order.
 When local context is too small, `ai.commit.contextFallback` can ask through gum
 or automatically try Codex, subject to cloud permission and an explicit model.
 
+### Tidy merged branches
+
+`git tidy` finds the local branches whose upstream is already merged into the
+remote's main branch (or was deleted on the remote after a merge). It shows them
+in a gum table. You select the branches to delete and confirm. It can then also
+delete the merged branches on the remote; you opt in to this and confirm it
+separately. It also lists stale branches, which have had no activity for 90
+days (set this with `git config tidy.staleAfter`). It offers to delete them, but
+none start selected. Run `git tidy --dry-run` to list the branches without
+changing anything. See the [git-tidy guide](tools/git-tidy/README.md) for the safety
+rules.
+
 ### Legacy installer usage
 
 Use a version tag for repeatable installs. `v1.2` will always mean the latest v1.2.x installer:

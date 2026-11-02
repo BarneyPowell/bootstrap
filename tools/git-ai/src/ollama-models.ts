@@ -1,5 +1,5 @@
 import type { Config } from './config.ts';
-import { Failure, cancelled } from './errors.ts';
+import { Failure, cancelled } from '../../shared/src/errors.ts';
 import { httpJSON, isLoopback } from './providers.ts';
 import { buildModelChoices, pickerDependency, selectModel } from './model-picker.ts';
 

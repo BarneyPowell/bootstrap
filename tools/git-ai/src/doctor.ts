@@ -1,9 +1,9 @@
 import { platform, release, homedir } from 'node:os';
 import type { Config, ProviderName } from './config.ts';
 import { providers } from './config.ts';
-import { Failure, cancelled, diagnostic } from './errors.ts';
+import { Failure, cancelled, diagnostic } from '../../shared/src/errors.ts';
 import { createAdapter, executableVersion } from './providers.ts';
-import { gumText as gum, styleText as style } from './gum.ts';
+import { palette, paint, styleText as style, table } from '../../shared/src/gum.ts';
 
 export type Status = 'ready' | 'blocked' | 'unavailable' | 'not-configured';
 export type DoctorEntry = {
@@ -77,35 +77,12 @@ export function plainLines(report: DoctorReport): string[] {
 
 // ---- gum rendering --------------------------------------------------------------------------
 
-const palette = { accent: '141', ok: '78', warn: '214', bad: '203', dim: '245', text: '252', rule: '240' };
 const look: Record<Status, { glyph: string; color: string; word: string }> = {
   ready: { glyph: '●', color: palette.ok, word: 'ready' },
   blocked: { glyph: '◐', color: palette.warn, word: 'blocked' },
   unavailable: { glyph: '✗', color: palette.bad, word: 'unavailable' },
   'not-configured': { glyph: '○', color: palette.dim, word: 'not configured' },
 };
-
-const ansi = /\x1b\[[0-9;]*m/g;
-const visible = (text: string) => [...text.replace(ansi, '')].length;
-// gum table gives its first row a "selected" bold; 22 restores normal intensity inside each cell.
-const paint = (color: string, text: string) => `\x1b[22m\x1b[38;5;${color}m${text}\x1b[0m`;
-
-function fitWidths(headers: string[], rows: string[][], limit: number): number[] {
-  const widths = headers.map((header, i) => Math.max(visible(header), ...rows.map(row => visible(row[i] ?? ''))));
-  const chrome = headers.length * 3 + 1;
-  while (widths.reduce((a, b) => a + b, 0) + chrome > limit) {
-    const widest = widths.indexOf(Math.max(...widths));
-    if (widths[widest] <= 8) break;
-    widths[widest]--;
-  }
-  return widths;
-}
-
-// gum table only ever widens a column, so cut over-long plain cells down to the fitted width.
-function truncate(cell: string, limit: number): string {
-  if (ansi.test(cell) || visible(cell) <= limit) return cell;
-  return [...cell].slice(0, Math.max(1, limit - 1)).join('') + '…';
-}
 
 // Word-wrap with a hanging indent so wrapped bullets stay visibly part of their bullet.
 export function wrap(text: string, width: number, first: string, rest: string): string {
@@ -118,14 +95,6 @@ export function wrap(text: string, width: number, first: string, rest: string): 
   }
   lines.push(line);
   return lines.join('\n');
-}
-
-async function table(signal: AbortSignal, headers: string[], rows: string[][], width: number): Promise<string> {
-  const widths = fitWidths(headers, rows, width);
-  const csv = rows.map(row => row.map((cell, i) => `"${truncate(cell, widths[i]).replace(/"/g, '""')}"`).join(',')).join('\n');
-  return await gum(['table', '--print', '--border=rounded', `--columns=${headers.join(',')}`,
-    `--widths=${widths.join(',')}`, `--border.foreground=${palette.rule}`,
-    `--header.foreground=${palette.accent}`, `--cell.foreground=${palette.text}`, '--selected.foreground='], signal, csv);
 }
 
 const heading = (signal: AbortSignal, text: string) => style(signal, `▍ ${text}`, '--bold', `--foreground=${palette.accent}`);

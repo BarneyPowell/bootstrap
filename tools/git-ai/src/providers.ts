@@ -2,9 +2,9 @@ import { isIP } from 'node:net';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { run } from './process.ts';
+import { run } from '../../shared/src/process.ts';
 import type { Config, ProviderName } from './config.ts';
-import { Failure, cancelled } from './errors.ts';
+import { Failure, cancelled } from '../../shared/src/errors.ts';
 import { createCodexAdapter } from './codex.ts';
 import { createClaudeAdapter } from './claude.ts';
 

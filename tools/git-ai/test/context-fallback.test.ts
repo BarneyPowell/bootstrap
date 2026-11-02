@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile, access } from 'node:fs/promises';
 import { generate } from '../src/fallback.ts';
 import { createAdapter } from '../src/providers.ts';
-import { Failure } from '../src/errors.ts';
+import { Failure } from '../../shared/src/errors.ts';
 import { config, fixture, fakeCodex } from './helpers.ts';
 import type { Snapshot } from '../src/git.ts';
 import type { Adapter } from '../src/providers.ts';

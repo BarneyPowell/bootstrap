@@ -9,12 +9,12 @@ import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { Git } from '../src/git.ts';
 import { commit } from '../src/commit.ts';
-import { run } from '../src/process.ts';
+import { run } from '../../shared/src/process.ts';
 import { fixture, git, stage, fakeCodex, fakeClaude } from './helpers.ts';
 
 const root = fileURLToPath(new URL('../../..', import.meta.url));
 const entry = join(root, 'scripts/git/git-ai');
-const tty = fileURLToPath(new URL('./pty_driver.py', import.meta.url));
+const tty = fileURLToPath(new URL('../../shared/test/pty_driver.py', import.meta.url));
 const message = 'feat: add staged behavior';
 
 async function service(t: any, directory: string, onGenerate?: (prompt: string) => void | 'hold', models = [{ name: 'test-model' }]) {

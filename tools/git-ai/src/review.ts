@@ -1,7 +1,7 @@
-import { Failure, cancelled, diagnostic } from './errors.ts';
-import { run } from './process.ts';
+import { Failure, cancelled, diagnostic } from '../../shared/src/errors.ts';
+import { run } from '../../shared/src/process.ts';
 import { pickerDependency } from './model-picker.ts';
-import { styleText } from './gum.ts';
+import { styleText } from '../../shared/src/gum.ts';
 import { collectDoctor } from './doctor.ts';
 import type { Config, ProviderName } from './config.ts';
 import type { Proposal } from './fallback.ts';

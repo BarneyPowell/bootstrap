@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { Git } from './git.ts';
-import { cancelled } from './errors.ts';
+import { cancelled } from '../../shared/src/errors.ts';
 
 // edit=false commits the reviewed message as-is; Git still runs hooks, signing and cleanup.
 export async function commit(git: Git, tree: string, message: string, edit = true): Promise<number> {

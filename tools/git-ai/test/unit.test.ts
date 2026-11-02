@@ -6,8 +6,8 @@ import { validateMessage } from '../src/validation.ts';
 import { prepare, instructions } from '../src/prompt.ts';
 import { generate } from '../src/fallback.ts';
 import { createAdapter, httpJSON, isLoopback } from '../src/providers.ts';
-import { Failure } from '../src/errors.ts';
-import { run } from '../src/process.ts';
+import { Failure } from '../../shared/src/errors.ts';
+import { run } from '../../shared/src/process.ts';
 import { config, fixture, git } from './helpers.ts';
 import { writeFile, readFile, access, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -520,25 +520,6 @@ process.stdin.on('end', () => {
 test('pinned unconfigured model is a configuration error', async t => {
   const directory = await fixture(t);
   await assert.rejects(loadConfig({ provider: 'ollama' }, directory), (e: any) => e.kind === 'configuration-invalid' && /ai.ollama.model/.test(e.message));
-});
-
-test('subprocess deadlines/cancellation terminate descendants and do not interpolate arguments', async t => {
-  const directory = await fixture(t);
-  const marker = join(directory, 'marker');
-  const arg = `$(touch ${marker})`;
-  const literal = await run(process.execPath, ['-e', 'process.stdout.write(process.argv[1])', arg]);
-  assert.equal(literal.stdout, arg);
-  await assert.rejects(access(marker));
-  const childScript = join(directory, 'child.cjs');
-  await writeFile(childScript, `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'leaked'), 600);`);
-  const parent = `require('node:child_process').spawn(process.execPath, [${JSON.stringify(childScript)}], {stdio:'ignore'}); setInterval(()=>{}, 1000);`;
-  await assert.rejects(run(process.execPath, ['-e', parent], { timeoutMs: 100 }), (e: any) => e.kind === 'timeout');
-  await new Promise(resolve => setTimeout(resolve, 700));
-  await assert.rejects(access(marker));
-  const controller = new AbortController();
-  const pending = run(process.execPath, ['-e', 'setInterval(()=>{}, 1000)'], { signal: controller.signal });
-  controller.abort();
-  await assert.rejects(pending, (e: any) => e.kind === 'cancelled');
 });
 
 test('provider generation and repair share one deadline', async () => {
