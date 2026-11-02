@@ -1,6 +1,7 @@
 import type { Config } from './config.ts';
-import { Failure, cancelled, diagnostic } from './errors.ts';
-import { run } from './process.ts';
+import { Failure, cancelled, diagnostic } from '../../shared/src/errors.ts';
+import { requireCommand, run } from '../../shared/src/process.ts';
+import { requireGum } from '../../shared/src/gum.ts';
 
 export type PickerModel = { name: string; remote: boolean; efforts?: string[]; aliases?: string[] };
 type PickerProvider = 'ollama' | 'codex' | 'claude';
@@ -25,19 +26,14 @@ export function buildModelChoices(models: PickerModel[], current?: string) {
     .map((model, i) => ({ model, label: `${i + 1}. ${model.name}${matchesCurrent(model, current) ? '  (current default)' : ''}${model.remote ? '  [remote model]' : ''}` }));
 }
 
+const guidance = {
+  ollama: 'Ollama CLI is unavailable. Install Ollama yourself, start its service, then retry.',
+  codex: 'Codex CLI is unavailable. Install Codex separately, then retry.',
+  claude: 'Claude CLI is unavailable. Install Claude Code separately, then retry.',
+};
+
 export async function pickerDependency(name: 'gum' | 'ollama' | 'codex' | 'claude', signal: AbortSignal): Promise<void> {
-  try {
-    const result = await run(name, ['--version'], { signal, timeoutMs: 3000 });
-    if (result.code === 0) return;
-  } catch (error) {
-    cancelled(signal);
-    if (!(error instanceof Failure)) throw error;
-  }
-  const guidance = name === 'gum' ? 'gum is unavailable. Run make ensure-gum from the bootstrap clone, then retry.'
-    : name === 'ollama' ? 'Ollama CLI is unavailable. Install Ollama yourself, start its service, then retry.'
-    : name === 'codex' ? 'Codex CLI is unavailable. Install Codex separately, then retry.'
-    : 'Claude CLI is unavailable. Install Claude Code separately, then retry.';
-  throw new Failure('not-installed', guidance);
+  await (name === 'gum' ? requireGum(signal) : requireCommand(name, guidance[name], signal));
 }
 
 export async function selectModel(config: Config, provider: PickerProvider, scope: 'global' | 'local', signal: AbortSignal,

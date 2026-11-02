@@ -7,7 +7,7 @@ import { commit } from './commit.ts';
 import { collectDoctor, plainLines, renderDoctor } from './doctor.ts';
 import { pickerDependency } from './model-picker.ts';
 import { reviewMessage, chooseProvider } from './review.ts';
-import { Failure, cancelled, diagnostic } from './errors.ts';
+import { Failure, cancelled, diagnostic } from '../../shared/src/errors.ts';
 import { selectOllamaModel } from './ollama-models.ts';
 import { selectCodexModel } from './codex-models.ts';
 import { selectClaudeModel } from './claude-models.ts';

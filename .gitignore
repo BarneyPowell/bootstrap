@@ -3,4 +3,4 @@
 *.swo
 .env
 *.local
-tools/git-ai/test/__pycache__/
+tools/*/test/__pycache__/

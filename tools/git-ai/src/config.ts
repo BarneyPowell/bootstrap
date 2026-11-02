@@ -1,5 +1,5 @@
-import { run } from './process.ts';
-import { Failure } from './errors.ts';
+import { run } from '../../shared/src/process.ts';
+import { Failure } from '../../shared/src/errors.ts';
 
 export const providers = ['apple', 'ollama', 'codex', 'claude'] as const;
 export type ProviderName = typeof providers[number];

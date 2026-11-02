@@ -54,3 +54,14 @@ export async function run(executable: string, args: string[], options: RunOption
     });
   });
 }
+
+// Fail with the caller's install guidance unless `<executable> --version` succeeds.
+export async function requireCommand(executable: string, guidance: string, signal: AbortSignal): Promise<void> {
+  try {
+    if ((await run(executable, ['--version'], { signal, timeoutMs: 3000 })).code === 0) return;
+  } catch (error) {
+    cancelled(signal);
+    if (!(error instanceof Failure)) throw error;
+  }
+  throw new Failure('not-installed', guidance);
+}

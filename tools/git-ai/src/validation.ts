@@ -1,4 +1,4 @@
-import { Failure } from './errors.ts';
+import { Failure } from '../../shared/src/errors.ts';
 
 export function validateMessage(output: unknown, subjectMaxLength: number): string {
   if (typeof output !== 'string' || !output.trim()) throw new Failure('invalid-output', 'Provider returned an empty message.');

@@ -1,7 +1,7 @@
 import { lstat } from 'node:fs/promises';
-import { run } from './process.ts';
-import type { RunOptions, Result } from './process.ts';
-import { Failure } from './errors.ts';
+import { run } from '../../shared/src/process.ts';
+import type { RunOptions, Result } from '../../shared/src/process.ts';
+import { Failure } from '../../shared/src/errors.ts';
 
 export type Change = {
   status: string; paths: string[]; oldMode: string; newMode: string;

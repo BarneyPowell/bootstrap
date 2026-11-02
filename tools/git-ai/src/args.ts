@@ -1,4 +1,4 @@
-import { Failure } from './errors.ts';
+import { Failure } from '../../shared/src/errors.ts';
 import { providers } from './config.ts';
 import type { Overrides, ProviderName } from './config.ts';
 

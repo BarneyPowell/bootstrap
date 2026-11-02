@@ -2,7 +2,7 @@ import type { Config, ProviderName } from './config.ts';
 import type { Snapshot } from './git.ts';
 import { createAdapter } from './providers.ts';
 import type { Adapter } from './providers.ts';
-import { Failure, cancelled, diagnostic } from './errors.ts';
+import { Failure, cancelled, diagnostic } from '../../shared/src/errors.ts';
 import { prepare } from './prompt.ts';
 import { validateMessage } from './validation.ts';
 import { confirmContextFallback } from './context-fallback.ts';

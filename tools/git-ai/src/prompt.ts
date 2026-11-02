@@ -1,5 +1,5 @@
 import type { Snapshot } from './git.ts';
-import { Failure } from './errors.ts';
+import { Failure } from '../../shared/src/errors.ts';
 
 export const instructions = `Generate one accurate Conventional Commits message for the supplied staged changes.
 Return only the commit message: no Markdown fences, commentary, quotation wrapper, or alternatives.

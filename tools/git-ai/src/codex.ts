@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Config } from './config.ts';
 import type { Adapter } from './providers.ts';
-import { Failure } from './errors.ts';
-import { run } from './process.ts';
+import { Failure } from '../../shared/src/errors.ts';
+import { run } from '../../shared/src/process.ts';
 import { instructions } from './prompt.ts';
 
 const requiredFeatures = ['shell_tool', 'hooks', 'apps', 'plugins', 'multi_agent', 'memories'];
