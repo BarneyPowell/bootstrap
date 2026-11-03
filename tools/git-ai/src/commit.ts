@@ -17,10 +17,14 @@ export async function commit(git: Git, tree: string, message: string, edit = tru
     // After handoff, Git owns signals, terminal interaction, hooks and recovery.
     return await new Promise((resolve, reject) => {
       const child = spawn('git', ['commit', '--file', file, ...(edit ? ['--edit'] : []), '--cleanup=strip'], {
-        cwd: git.cwd, stdio: 'inherit', shell: false,
+        cwd: git.cwd,
+        stdio: 'inherit',
+        shell: false,
       });
       child.on('error', reject);
       child.on('exit', (code, signal) => resolve(code ?? (signal === 'SIGINT' ? 130 : signal === 'SIGTERM' ? 143 : 1)));
     });
-  } finally { await rm(directory, { recursive: true, force: true }); }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 }

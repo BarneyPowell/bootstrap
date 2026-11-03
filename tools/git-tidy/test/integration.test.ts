@@ -15,9 +15,15 @@ async function cli(cwd: string, args: string[], env: NodeJS.ProcessEnv = {}, int
   return await run(command, parameters, { cwd, env: { ...process.env, ...env }, timeoutMs: 20_000 });
 }
 
-const branches = (cwd: string) => git(cwd, 'for-each-ref', '--format=%(refname:short)', 'refs/heads').split('\n').filter(Boolean);
-const remoteBranches = (origin: string) => git(origin, 'for-each-ref', '--format=%(refname:short)', 'refs/heads').split('\n').filter(Boolean);
-const prompts = async (log: string) => (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+const branches = (cwd: string) =>
+  git(cwd, 'for-each-ref', '--format=%(refname:short)', 'refs/heads').split('\n').filter(Boolean);
+const remoteBranches = (origin: string) =>
+  git(origin, 'for-each-ref', '--format=%(refname:short)', 'refs/heads').split('\n').filter(Boolean);
+const prompts = async (log: string) =>
+  (await readFile(log, 'utf8'))
+    .trim()
+    .split('\n')
+    .map(line => JSON.parse(line));
 
 test('--dry-run lists candidates without a terminal or gum and changes nothing', async t => {
   const { work, origin } = await fixture(t);
@@ -58,7 +64,10 @@ test('confirming deletes the selected local branches only; remote step can be sk
   assert.equal(git(work, 'config', 'list').includes('branch.merged.'), false);
   assert.match(result.stdout, /Deleted 1 local · 0 on origin/);
   const [choose, confirm, remote] = await prompts(gum.log);
-  assert.deepEqual(choose.options.map((option: string) => option.split('\t')[1]), ['gone', 'merged']);
+  assert.deepEqual(
+    choose.options.map((option: string) => option.split('\t')[1]),
+    ['gone', 'merged'],
+  );
   assert.ok(choose.args.includes('--selected=*'));
   assert.equal(confirm.command, 'confirm');
   assert.ok(confirm.args.includes('Delete 1 local branch?'));
@@ -99,7 +108,12 @@ test('declining, Esc and Ctrl-C delete nothing', async t => {
   const { root: dir, work, origin } = await fixture(t);
   const gum = await fakeGum(dir);
   const before = [branches(work), remoteBranches(origin)];
-  for (const [script, code] of [['all,no', 0], ['esc', 0], ['ctrl-c', 130], ['all,ctrl-c', 130]] as const) {
+  for (const [script, code] of [
+    ['all,no', 0],
+    ['esc', 0],
+    ['ctrl-c', 130],
+    ['all,ctrl-c', 130],
+  ] as const) {
     await run('rm', ['-f', join(dir, 'gum-step')]);
     const result = await cli(work, ['--no-fetch'], { ...gum.env, TIDY_GUM: script });
     assert.equal(result.code, code, `${script}: ${result.stdout}`);
@@ -139,9 +153,16 @@ test('stale branches start unselected and are deleted only after a warning that 
   assert.match(result.stdout, /Deleted 1 local · 0 on origin/);
   const [, stale, warning] = await prompts(gum.log);
   assert.ok(stale.args.includes('--selected='));
-  assert.deepEqual(stale.options.map((option: string) => option.split('\t')[1]), ['old-local', 'old-pushed']);
+  assert.deepEqual(
+    stale.options.map((option: string) => option.split('\t')[1]),
+    ['old-local', 'old-pushed'],
+  );
   assert.ok(warning.args.includes('--default=false'));
-  assert.ok(warning.args.includes('Delete 1 stale branch? 2 commits not in origin/main. 2 commits exist only in this clone and will be lost.'));
+  assert.ok(
+    warning.args.includes(
+      'Delete 1 stale branch? 2 commits not in origin/main. 2 commits exist only in this clone and will be lost.',
+    ),
+  );
 });
 
 test('tidy.staleAfter sets the threshold, --stale-after overrides it, and bad values are rejected', async t => {

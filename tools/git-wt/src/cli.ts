@@ -1,8 +1,25 @@
 import { existsSync } from 'node:fs';
 import { help, version, parseArgs } from './args.ts';
 import {
-  addExisting, addNew, addTracking, defaultBranch, ensureFetchRefspec, fastForward, fetchAll, fetchBranch, hasLocal,
-  hasOwnCommits, isDirty, remote, remoteHas, resetToRemote, setUpstream, targetDir, validBranch, worktreeFor, worktreeRoot,
+  addExisting,
+  addNew,
+  addTracking,
+  defaultBranch,
+  ensureFetchRefspec,
+  fastForward,
+  fetchAll,
+  fetchBranch,
+  hasLocal,
+  hasOwnCommits,
+  isDirty,
+  remote,
+  remoteHas,
+  resetToRemote,
+  setUpstream,
+  targetDir,
+  validBranch,
+  worktreeFor,
+  worktreeRoot,
 } from './worktree.ts';
 import { Repo } from '../../shared/src/git.ts';
 import { confirm, paint, palette, requireGum } from '../../shared/src/gum.ts';
@@ -22,8 +39,11 @@ const warn = (line: string) => report(line, palette.warn);
 async function spin<T>(text: string, work: () => Promise<T>): Promise<T> {
   const spinner = new Spinner();
   spinner.update(text);
-  try { return await work(); }
-  finally { spinner.stop(); }
+  try {
+    return await work();
+  } finally {
+    spinner.stop();
+  }
 }
 
 // gum confirm needs the terminal on stdin and stderr; stdout is usually captured by $(…).
@@ -44,8 +64,14 @@ async function main(): Promise<number> {
   const repo = new Repo(undefined, signal);
   const root = await worktreeRoot(repo);
   const branch = await validBranch(repo, parsed.branch);
-  const done = (dir: string) => { process.stdout.write(`${dir}\n`); return 0; };
-  const declined = (answer: 'no' | 'cancel') => { report('Cancelled; nothing was created.'); return answer === 'cancel' ? 130 : 1; };
+  const done = (dir: string) => {
+    process.stdout.write(`${dir}\n`);
+    return 0;
+  };
+  const declined = (answer: 'no' | 'cancel') => {
+    report('Cancelled; nothing was created.');
+    return answer === 'cancel' ? 130 : 1;
+  };
 
   const existing = await worktreeFor(repo, branch);
   if (existing) {
@@ -54,18 +80,24 @@ async function main(): Promise<number> {
   }
   const dir = targetDir(root, branch);
   if (existsSync(dir)) throw new Failure('target-exists', `${dir} already exists.`);
-  if (await ensureFetchRefspec(repo)) warn(`${remote} had no fetch refspec; added +refs/heads/*:refs/remotes/${remote}/*`);
+  if (await ensureFetchRefspec(repo))
+    warn(`${remote} had no fetch refspec; added +refs/heads/*:refs/remotes/${remote}/*`);
 
   if (await spin(`Checking ${remote} for ${branch}…`, () => remoteHas(repo, branch))) {
     await spin(`Fetching ${branch}…`, () => fetchBranch(repo, branch));
     if (await hasLocal(repo, branch)) {
       await addExisting(repo, dir, branch);
       await setUpstream(repo, branch);
-      if (await hasOwnCommits(repo, branch)) warn(`Local ${branch} has commits that aren't on ${remote}/${branch}; left as is.`);
+      if (await hasOwnCommits(repo, branch))
+        warn(`Local ${branch} has commits that aren't on ${remote}/${branch}; left as is.`);
       else await resetToRemote(repo, dir, branch);
     } else await addTracking(repo, dir, branch);
   } else if (await hasLocal(repo, branch)) {
-    const answer = await ask(`${branch} exists locally but not on ${remote}. Create a worktree for it?`, 'Create worktree', signal);
+    const answer = await ask(
+      `${branch} exists locally but not on ${remote}. Create a worktree for it?`,
+      'Create worktree',
+      signal,
+    );
     if (answer !== 'yes') return declined(answer);
     await addExisting(repo, dir, branch);
   } else {
@@ -74,8 +106,14 @@ async function main(): Promise<number> {
     await spin(`Fetching ${remote}…`, () => fetchAll(repo));
     const base = await defaultBranch(repo);
     const baseWorktree = await worktreeFor(repo, base);
-    if (baseWorktree && await isDirty(repo, baseWorktree)) warn(`${baseWorktree} has local changes; not updating it.`);
-    else if (baseWorktree && !(await spin(`Fast-forwarding ${baseWorktree} to ${remote}/${base}…`, () => fastForward(repo, baseWorktree, base))))
+    if (baseWorktree && (await isDirty(repo, baseWorktree)))
+      warn(`${baseWorktree} has local changes; not updating it.`);
+    else if (
+      baseWorktree &&
+      !(await spin(`Fast-forwarding ${baseWorktree} to ${remote}/${base}…`, () =>
+        fastForward(repo, baseWorktree, base),
+      ))
+    )
       warn(`${baseWorktree} couldn't fast-forward to ${remote}/${base}; left as is.`);
     await addNew(repo, dir, branch, base);
   }
@@ -84,8 +122,17 @@ async function main(): Promise<number> {
   return done(dir);
 }
 
-try { process.exitCode = await main(); }
-catch (error) {
-  report(error instanceof Failure ? `${error.kind}: ${error.message}` : 'Unexpected failure; raw diagnostics suppressed.');
-  process.exitCode = controller.signal.aborted ? (controller.signal.reason === 'SIGTERM' ? 143 : 130) : error instanceof Failure && error.kind === 'cancelled' ? 130 : 1;
+try {
+  process.exitCode = await main();
+} catch (error) {
+  report(
+    error instanceof Failure ? `${error.kind}: ${error.message}` : 'Unexpected failure; raw diagnostics suppressed.',
+  );
+  process.exitCode = controller.signal.aborted
+    ? controller.signal.reason === 'SIGTERM'
+      ? 143
+      : 130
+    : error instanceof Failure && error.kind === 'cancelled'
+      ? 130
+      : 1;
 }

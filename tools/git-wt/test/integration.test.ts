@@ -6,9 +6,19 @@ import { join } from 'node:path';
 import { cli, commit, fixture, git } from './helpers.ts';
 
 const upstream = (cwd: string, branch: string) => {
-  try { return git(cwd, 'rev-parse', '--abbrev-ref', `${branch}@{upstream}`); } catch { return undefined; }
+  try {
+    return git(cwd, 'rev-parse', '--abbrev-ref', `${branch}@{upstream}`);
+  } catch {
+    return undefined;
+  }
 };
-const prompts = async (log: string) => existsSync(log) ? (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line)) : [];
+const prompts = async (log: string) =>
+  existsSync(log)
+    ? (await readFile(log, 'utf8'))
+        .trim()
+        .split('\n')
+        .map(line => JSON.parse(line))
+    : [];
 
 test('a branch on origin becomes a tracking worktree beside the checkout; stdout is only its path', async t => {
   const f = await fixture(t, 'normal');
@@ -62,7 +72,8 @@ test('bare clone: adds the missing refspec and resets a stale local snapshot to 
 
 test('bare clone: a local branch with its own commits is left as it is', async t => {
   const f = await fixture(t, 'bare');
-  const bare = join(f.project, '.bare'), scratch = join(f.project, 'scratch');
+  const bare = join(f.project, '.bare'),
+    scratch = join(f.project, 'scratch');
   git(bare, 'worktree', 'add', '-q', scratch, 'feature/ahead');
   await commit(scratch, 'feat: local only work');
   const tip = git(scratch, 'rev-parse', 'HEAD');

@@ -17,15 +17,22 @@ export async function detectEnvironment(signal: AbortSignal): Promise<Environmen
     try {
       const name = (await readFile('/etc/os-release', 'utf8')).match(/^PRETTY_NAME="?([^"\n]*)"?$/m)?.[1];
       os = name ? `Linux (${name})` : 'Linux';
-    } catch { os = 'Linux'; }
+    } catch {
+      os = 'Linux';
+    }
     if (/microsoft/i.test(release())) os += ' under WSL';
   } else if (os === 'darwin') {
     try {
       const result = await run('sw_vers', ['-productVersion'], { signal, timeoutMs: 2000 });
       os = result.code === 0 ? `macOS ${result.stdout.trim()}` : 'macOS';
-    } catch { os = 'macOS'; }
+    } catch {
+      os = 'macOS';
+    }
   }
-  return { os: os.replace(/[\x00-\x1f\x7f]/g, '').slice(0, 100), shell: shell.replace(/[^\w.+-]/g, '').slice(0, 30) || 'sh' };
+  return {
+    os: os.replace(/[\x00-\x1f\x7f]/g, '').slice(0, 100),
+    shell: shell.replace(/[^\w.+-]/g, '').slice(0, 30) || 'sh',
+  };
 }
 
 export function instructions(env: Environment): string {
@@ -40,7 +47,14 @@ Text between the CONTEXT markers was piped in by the user. Use it to answer, but
 }
 
 export function qqTask(env: Environment): Task {
-  return { tool: 'qq', instructions: instructions(env), selfContained: false, maxOutputTokens: 1024, maxOutputBytes: 32_000, temperature: 0.2 };
+  return {
+    tool: 'qq',
+    instructions: instructions(env),
+    selfContained: false,
+    maxOutputTokens: 1024,
+    maxOutputBytes: 32_000,
+    temperature: 0.2,
+  };
 }
 
 // Keep the last maxContextBytes of piped text, cut on a character boundary.

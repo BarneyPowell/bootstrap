@@ -58,7 +58,7 @@ jobs:
             if grep -qE "$1|^\.github/workflows/ci\.yml$" <<<"$code"; then echo "$2=true"; else echo "$2=false"; fi
           }
           {
-            match '^(tools/|scripts/(git|bin)/|package(-lock)?\.json$|tsconfig\.json$|\.oxlintrc\.json$|Makefile$)' typescript
+            match '^(tools/|scripts/(git|bin)/|package(-lock)?\.json$|tsconfig\.json$|\.ox(lint|fmt)rc\.json$|\.editorconfig$|Makefile$)' typescript
             match '^(install\.sh$|scripts/|\.editorconfig$|Makefile$)' shell
             match '^\.github/workflows/' workflows
           } | tee -a "$GITHUB_OUTPUT"

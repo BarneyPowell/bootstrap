@@ -4,7 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-Object.assign(process.env, { GIT_AUTHOR_NAME: 'Test User', GIT_AUTHOR_EMAIL: 'test@example.invalid', GIT_COMMITTER_NAME: 'Test User', GIT_COMMITTER_EMAIL: 'test@example.invalid' });
+Object.assign(process.env, {
+  GIT_AUTHOR_NAME: 'Test User',
+  GIT_AUTHOR_EMAIL: 'test@example.invalid',
+  GIT_COMMITTER_NAME: 'Test User',
+  GIT_COMMITTER_EMAIL: 'test@example.invalid',
+});
 
 export function git(cwd: string, ...args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).replace(/\n$/, '');
@@ -28,8 +33,12 @@ export type Fixture = { root: string; origin: string; work: string; worktree: st
 //                          old tip but was created today, so it is not stale)
 export async function fixture(t: { after: (fn: () => Promise<void>) => void }): Promise<Fixture> {
   const root = await mkdtemp(join(tmpdir(), 'git-tidy-test-'));
-  t.after(async () => { await rm(root, { recursive: true, force: true }); });
-  const origin = join(root, 'origin.git'), work = join(root, 'work'), worktree = join(root, 'wt');
+  t.after(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+  const origin = join(root, 'origin.git'),
+    work = join(root, 'work'),
+    worktree = join(root, 'wt');
   await mkdir(origin);
   git(origin, 'init', '-q', '--bare', '-b', 'main');
   git(root, 'clone', '-q', origin, work);
@@ -44,7 +53,10 @@ export async function fixture(t: { after: (fn: () => Promise<void>) => void }): 
     await commit(work, `feat: ${name} work`);
     git(work, 'push', '-q', '-u', 'origin', name);
     git(work, 'switch', '-q', 'main');
-    if (merge) { git(work, 'merge', '-q', '--no-ff', '-m', `Merge ${name}`, name); git(work, 'push', '-q', 'origin', 'main'); }
+    if (merge) {
+      git(work, 'merge', '-q', '--no-ff', '-m', `Merge ${name}`, name);
+      git(work, 'push', '-q', 'origin', 'main');
+    }
   };
   await branch('merged', true);
   await branch('gone', true);
@@ -89,8 +101,11 @@ export async function fixture(t: { after: (fn: () => Promise<void>) => void }): 
 export async function fakeGum(root: string): Promise<{ env: NodeJS.ProcessEnv; log: string }> {
   const bin = join(root, 'gum-bin');
   await mkdir(bin, { recursive: true });
-  const log = join(root, 'gum-log'), step = join(root, 'gum-step');
-  await writeFile(join(bin, 'gum'), `#!/usr/bin/env node
+  const log = join(root, 'gum-log'),
+    step = join(root, 'gum-step');
+  await writeFile(
+    join(bin, 'gum'),
+    `#!/usr/bin/env node
 const fs = require('node:fs');
 const args = process.argv.slice(2);
 const script = (process.env.TIDY_GUM || 'all,yes').split(',');
@@ -110,6 +125,8 @@ const values = options.map(option => option.split('\\t').at(-1));
 const picked = choice === 'all' ? values : choice === 'none' ? [] : choice.startsWith('pick:') ? choice.slice(5).split('+') : null;
 if (!picked) process.exit(3);
 for (const value of picked) console.log(value);
-`, { mode: 0o700 });
+`,
+    { mode: 0o700 },
+  );
   return { env: { PATH: `${bin}:${process.env.PATH}` }, log };
 }

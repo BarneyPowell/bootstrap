@@ -9,7 +9,9 @@ export class Spinner {
   private text = '';
   private index = 0;
   private stream: NodeJS.WriteStream;
-  constructor(stream: NodeJS.WriteStream = process.stderr) { this.stream = stream; }
+  constructor(stream: NodeJS.WriteStream = process.stderr) {
+    this.stream = stream;
+  }
 
   update(text: string): void {
     if (!this.stream.isTTY) return;
@@ -23,7 +25,9 @@ export class Spinner {
 
   private draw(): void {
     const frame = this.frames[this.index++ % this.frames.length];
-    const line = colour(this.stream) ? `${paint(palette.accent, frame)} ${paint(palette.dim, this.text)}` : `${frame} ${this.text}`;
+    const line = colour(this.stream)
+      ? `${paint(palette.accent, frame)} ${paint(palette.dim, this.text)}`
+      : `${frame} ${this.text}`;
     this.stream.write(`\r\x1b[2K${line}`);
   }
 

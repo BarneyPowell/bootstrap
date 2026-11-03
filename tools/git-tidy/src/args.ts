@@ -45,7 +45,8 @@ export function parseArgs(args: string[]): { command: 'help' | 'version' | 'tidy
     else if (flag === '--no-fetch') options.fetch = false;
     else if (flag === '--remote' || flag === '--stale-after') {
       const value = args[++i];
-      if (value === undefined || value.startsWith('-')) throw new Failure('configuration-invalid', `Missing value for ${flag}.`);
+      if (value === undefined || value.startsWith('-'))
+        throw new Failure('configuration-invalid', `Missing value for ${flag}.`);
       if (flag === '--remote') options.remote = value;
       else options.staleAfter = value;
     } else throw new Failure('configuration-invalid', `Unsupported option: ${flag}. Run git tidy -h.`);

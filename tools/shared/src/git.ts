@@ -6,9 +6,16 @@ import { Failure } from './errors.ts';
 export class Repo {
   cwd: string;
   signal?: AbortSignal;
-  constructor(cwd = process.cwd(), signal?: AbortSignal) { this.cwd = cwd; this.signal = signal; }
+  constructor(cwd = process.cwd(), signal?: AbortSignal) {
+    this.cwd = cwd;
+    this.signal = signal;
+  }
   async capture(args: string[], options: RunOptions = {}): Promise<Result> {
-    return await run('git', ['--no-pager', '-c', 'color.ui=false', ...args], { cwd: this.cwd, signal: this.signal, ...options });
+    return await run('git', ['--no-pager', '-c', 'color.ui=false', ...args], {
+      cwd: this.cwd,
+      signal: this.signal,
+      ...options,
+    });
   }
   async text(args: string[], action: string): Promise<string> {
     const result = await this.capture(args);

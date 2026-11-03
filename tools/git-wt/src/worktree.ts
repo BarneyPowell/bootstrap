@@ -13,7 +13,11 @@ const network: RunOptions = { env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
 async function step(repo: Repo, args: string[], action: string, options: RunOptions = {}): Promise<void> {
   const result = await repo.capture(args, options);
   if (result.code === 0) return;
-  const reason = result.stderr.trim().split('\n').at(-1)?.replace(/^(fatal|error): /, '');
+  const reason = result.stderr
+    .trim()
+    .split('\n')
+    .at(-1)
+    ?.replace(/^(fatal|error): /, '');
   throw new Failure('git-error', `${action} failed${reason ? `: ${diagnostic(reason)}` : '.'}`);
 }
 
@@ -22,7 +26,10 @@ export async function worktreeRoot(repo: Repo): Promise<string> {
   const result = await repo.capture(['rev-parse', '--path-format=absolute', '--git-common-dir']);
   if (result.code !== 0) throw new Failure('git-error', 'Run git wt inside a Git repository.');
   const common = result.stdout.trim();
-  const bare = await new Repo(common, repo.signal).text(['rev-parse', '--is-bare-repository'], 'inspecting the repository');
+  const bare = await new Repo(common, repo.signal).text(
+    ['rev-parse', '--is-bare-repository'],
+    'inspecting the repository',
+  );
   return bare === 'true' ? dirname(common) : dirname(dirname(common));
 }
 
@@ -42,7 +49,8 @@ export function parseWorktrees(porcelain: string): Worktree[] {
   const list: Worktree[] = [];
   for (const line of porcelain.split('\0')) {
     if (line.startsWith('worktree ')) list.push({ path: line.slice('worktree '.length) });
-    else if (line.startsWith('branch refs/heads/') && list.length) list.at(-1)!.branch = line.slice('branch refs/heads/'.length);
+    else if (line.startsWith('branch refs/heads/') && list.length)
+      list.at(-1)!.branch = line.slice('branch refs/heads/'.length);
   }
   return list;
 }
@@ -56,11 +64,15 @@ export async function worktreeFor(repo: Repo, branch: string): Promise<string | 
 // Returns whether the refspec had to be added.
 export async function ensureFetchRefspec(repo: Repo): Promise<boolean> {
   const remotes = (await repo.text(['remote'], 'listing remotes')).split('\n');
-  if (!remotes.includes(remote)) throw new Failure('configuration-invalid', `This repository has no remote called ${remote}.`);
+  if (!remotes.includes(remote))
+    throw new Failure('configuration-invalid', `This repository has no remote called ${remote}.`);
   const result = await repo.capture(['config', '--get-all', `remote.${remote}.fetch`]);
   if (result.code === 0 && result.stdout.trim()) return false;
   if (result.code > 1) throw new Failure('configuration-invalid', `Cannot read git config remote.${remote}.fetch.`);
-  await repo.text(['config', `remote.${remote}.fetch`, `+refs/heads/*:refs/remotes/${remote}/*`], 'adding a fetch refspec');
+  await repo.text(
+    ['config', `remote.${remote}.fetch`, `+refs/heads/*:refs/remotes/${remote}/*`],
+    'adding a fetch refspec',
+  );
   return true;
 }
 
@@ -73,7 +85,12 @@ export async function remoteHas(repo: Repo, branch: string): Promise<boolean> {
 }
 
 export const fetchBranch = (repo: Repo, branch: string) =>
-  step(repo, ['fetch', remote, `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`], `Fetching ${branch} from ${remote}`, network);
+  step(
+    repo,
+    ['fetch', remote, `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`],
+    `Fetching ${branch} from ${remote}`,
+    network,
+  );
 
 export const fetchAll = (repo: Repo) => step(repo, ['fetch', '--prune', remote], `Fetching ${remote}`, network);
 
@@ -84,7 +101,10 @@ export const hasLocal = async (repo: Repo, branch: string) =>
 // stale snapshot of a branch that has since been rebased. It is its own work only if git cherry
 // finds commits whose changes are not on the remote branch.
 export async function hasOwnCommits(repo: Repo, branch: string): Promise<boolean> {
-  const cherry = await repo.text(['cherry', `refs/remotes/${remote}/${branch}`, `refs/heads/${branch}`], 'comparing with the remote branch');
+  const cherry = await repo.text(
+    ['cherry', `refs/remotes/${remote}/${branch}`, `refs/heads/${branch}`],
+    'comparing with the remote branch',
+  );
   return cherry.split('\n').some(line => line.startsWith('+'));
 }
 
@@ -113,4 +133,8 @@ export const setUpstream = (repo: Repo, branch: string) =>
   step(repo, ['branch', `--set-upstream-to=${remote}/${branch}`, branch], 'Setting the upstream');
 
 export const resetToRemote = (repo: Repo, dir: string, branch: string) =>
-  step(new Repo(dir, repo.signal), ['reset', '-q', '--hard', `${remote}/${branch}`], `Resetting ${branch} to ${remote}/${branch}`);
+  step(
+    new Repo(dir, repo.signal),
+    ['reset', '-q', '--hard', `${remote}/${branch}`],
+    `Resetting ${branch} to ${remote}/${branch}`,
+  );
