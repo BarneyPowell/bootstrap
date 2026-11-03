@@ -248,6 +248,10 @@ make ci      # make lint, then make test
   oxfmt and shfmt both read `.editorconfig` (indentation, and `case` indentation
   for shfmt), so editors and formatters agree. In VS Code, the recommended
   extensions format TypeScript on save.
+- The TypeScript was reformatted in one commit when oxfmt was adopted. To have
+  `git blame` skip it and show who last changed each line's code, run
+  `git config blame.ignoreRevsFile .git-blame-ignore-revs` once. GitHub's blame
+  view reads that file automatically.
 - `make lint-workflows` runs actionlint on `.github/workflows`. It is not part of
   `make lint`, because actionlint is not packaged everywhere (`brew install
   actionlint`, or `go install`).

@@ -1,0 +1,6 @@
+# Commits that only reformat code. git blame skips them when configured with:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+# GitHub's blame view reads this file automatically.
+
+# style: format TypeScript with oxfmt (#26)
+246afbf73a66c9f6fac863758ae1e1927bf434c3
