@@ -1,4 +1,4 @@
-.PHONY: help install install-commands install-git-aliases install-git ensure-gum test test-shared test-git-ai test-git-tidy test-git-wt test-qq check lint lint-ts lint-shell lint-workflows ci fmt fmt-check
+.PHONY: help install install-commands install-git-aliases install-git ensure-gum test test-shared test-git-ai test-git-tidy test-git-wt test-git-live test-qq check lint lint-ts lint-shell lint-workflows ci fmt fmt-check
 
 SHELL_SCRIPTS := install.sh $(wildcard scripts/*.sh scripts/git/git-* scripts/bin/*)
 BIN := node_modules/.bin
@@ -24,6 +24,7 @@ help:
 	@echo 'make test-git-ai   run isolated git-ai tests (no live inference)'
 	@echo 'make test-git-tidy run isolated git-tidy tests (temporary repositories only)'
 	@echo 'make test-git-wt  run isolated git-wt tests (temporary repositories only)'
+	@echo 'make test-git-live run isolated git-live tests (temporary repositories, fake gh)'
 	@echo 'make test-qq      run isolated qq tests (fake providers only)'
 	@echo 'make test         run every test suite'
 
@@ -85,10 +86,13 @@ test-git-tidy:
 test-git-wt:
 	@cd tools/git-wt && node --test test/*.test.ts
 
+test-git-live:
+	@cd tools/git-live && node --test test/*.test.ts
+
 test-qq:
 	@cd tools/qq && node --test test/*.test.ts
 
-test: test-shared test-git-ai test-git-tidy test-git-wt test-qq
+test: test-shared test-git-ai test-git-tidy test-git-wt test-git-live test-qq
 
 test-shared:
 	@cd tools/shared && node --test test/*.test.ts

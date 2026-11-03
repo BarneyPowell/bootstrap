@@ -1,0 +1,8 @@
+{
+  "name": "bootstrap-git-live",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": { "test": "node --test test/*.test.ts" }
+}

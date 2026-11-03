@@ -113,6 +113,22 @@ fetched and tracked. A branch that is new is created from origin's default
 branch, after a confirmation. It works with bare clones (`root/.bare`) and
 normal checkouts (`root/repo`). See the [git-wt guide](tools/git-wt/README.md).
 
+### Ship the live branch
+
+Small changes, such as settings or new aliases, can go straight onto the `live`
+branch. When you want them on `main`, run:
+
+```sh
+git live            # push live, open a PR into main, and auto-merge it when CI passes
+git live --review   # the same, but leave the PR for you to merge
+```
+
+The PR merges with a merge commit, not a squash, so `main` then contains all of
+`live`. The [Sync live](.github/workflows/sync-live.yml) workflow then
+fast-forwards `live` to `main`, so `live` never needs merging by hand. Run
+`git pull` on `live` before you add more. See the
+[git-live guide](tools/git-live/README.md).
+
 ### Quick questions
 
 `qq` asks an AI provider one question and prints the answer, formatted with gum:
