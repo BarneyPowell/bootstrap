@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -14,47 +15,105 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  check:
-    name: make ci (${{ matrix.os }}, Node ${{ matrix.node }})
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # 22 is the oldest supported major (engines: >=22.18.0).
-          - { os: ubuntu-latest, node: "22" }
-          - { os: ubuntu-latest, node: lts/* }
-          - { os: macos-latest, node: lts/* }
+  # The workflow always starts, so required checks never wait on a run that was
+  # filtered out; the jobs below are skipped instead, which counts as passing.
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      typescript: ${{ steps.filter.outputs.typescript }}
+      shell: ${{ steps.filter.outputs.shell }}
+      workflows: ${{ steps.filter.outputs.workflows }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Find changed files
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # A pull request checks out its merge commit, whose first parent is the base branch.
+          if [ "$EVENT" = pull_request ]; then
+            base=HEAD^1
+          elif [ "$EVENT" = push ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            base=$BEFORE
+          else
+            base= # manual run, new branch or rewritten history: check everything
+          fi
+          if [ -n "$base" ]; then
+            files=$(git diff --name-only "$base" HEAD)
+          else
+            files=.github/workflows/ci.yml
+          fi
+          printf 'Changed files:\n%s\n' "$files"
+
+          # Documentation never needs checking. A change to this workflow checks everything.
+          code=$(grep -v '\.md$' <<<"$files" || true)
+          match() {
+            if grep -qE "$1|^\.github/workflows/ci\.yml$" <<<"$code"; then echo "$2=true"; else echo "$2=false"; fi
+          }
+          {
+            match '^(tools/|scripts/(git|bin)/|package(-lock)?\.json$|tsconfig\.json$|\.oxlintrc\.json$|Makefile$)' typescript
+            match '^(install\.sh$|scripts/|\.editorconfig$|Makefile$)' shell
+            match '^\.github/workflows/' workflows
+          } | tee -a "$GITHUB_OUTPUT"
+
+  # Each job also runs if change detection failed, so a broken filter cannot skip checks.
+  typescript:
+    name: typescript
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result == 'failure' || needs.changes.outputs.typescript == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
+      # The oldest supported major (engines: >=24).
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: ${{ matrix.node }}
+          node-version: "24"
           cache: npm
 
       - name: Install dev dependencies
         run: npm ci
 
-      - name: Install ShellCheck and shfmt (Linux)
-        if: runner.os == 'Linux'
+      - name: Type-check and lint
+        run: make lint-ts
+
+      # -k runs every suite even after one fails, so a run reports all failures.
+      - name: Test
+        run: make -k test
+
+  shell:
+    name: shell
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result == 'failure' || needs.changes.outputs.shell == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install ShellCheck and shfmt
         run: |
           sudo apt-get update
           sudo apt-get install -y shellcheck shfmt
 
-      - name: Install ShellCheck and shfmt (macOS)
-        if: runner.os == 'macOS'
-        run: brew install shellcheck shfmt
+      - name: Lint shell scripts
+        run: make lint-shell
 
-      # -k runs every check and test suite even after one fails, so a run reports all failures.
-      - name: Lint and test
-        run: make -k ci
-
-  workflows:
+  actionlint:
     name: actionlint
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result == 'failure' || needs.changes.outputs.workflows == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

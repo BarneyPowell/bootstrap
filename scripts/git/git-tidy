@@ -10,11 +10,11 @@ while [[ -L "$source_path" ]]; do
 done
 repo_dir="$(cd -- "$(dirname -- "$source_path")/../.." && pwd -P)"
 if ! command -v node >/dev/null 2>&1; then
-  printf 'git-tidy requires Node.js 22.18 or later.\n' >&2
+  printf 'git-tidy requires Node.js 24 or later.\n' >&2
   exit 1
 fi
-node -e 'const [major, minor] = process.versions.node.split(".").map(Number); if (major < 22 || (major === 22 && minor < 18) || major === 23) process.exit(1)' || {
-  printf 'git-tidy requires Node.js 22.18 or later (24 LTS recommended).\n' >&2
+node -e 'if (Number(process.versions.node.split(".")[0]) < 24) process.exit(1)' || {
+  printf 'git-tidy requires Node.js 24 or later.\n' >&2
   exit 1
 }
 exec node "$repo_dir/tools/git-tidy/src/cli.ts" "$@"

@@ -248,9 +248,18 @@ make ci      # make lint, then make test
   `make lint`, because actionlint is not packaged everywhere (`brew install
   actionlint`, or `go install`).
 
-CI (`.github/workflows/ci.yml`) runs `make ci` on every pull request and push to
-`main`: on Ubuntu with Node 22 (the oldest supported) and the current LTS, and on
-macOS with the current LTS. A separate job runs actionlint.
+CI (`.github/workflows/ci.yml`) runs on every pull request and push to `main`, on
+Ubuntu, in three jobs that each run only when their files change:
+
+| Job | Runs | When these change |
+| --- | --- | --- |
+| `typescript` | `make lint-ts`, then every test suite (Node 24) | `tools/`, `scripts/git/`, `scripts/bin/`, npm, TypeScript or oxlint config |
+| `shell` | `make lint-shell` | `install.sh`, `scripts/`, `.editorconfig` |
+| `actionlint` | `make lint-workflows` | `.github/workflows/` |
+
+Markdown files never trigger a job. A change to the `Makefile` runs `typescript`
+and `shell`; a change to `ci.yml`, or a manual run, runs all three. A `changes`
+job decides which jobs run; if it fails, every job runs.
 
 ## Notes
 

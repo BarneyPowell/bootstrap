@@ -30,8 +30,8 @@ and a failing hook still stops the commit. `--yolo` cannot be combined with
 
 ## Build and install
 
-Requires Bash, Git (2.31+ for path resolution), and Node.js **22.18+** with native
-TypeScript support (24 LTS recommended; Node 23 is rejected). There are no npm
+Requires Bash, Git (2.31+ for path resolution), and Node.js **24+**, which runs
+TypeScript natively. There are no npm
 dependencies, TypeScript runner, package installation, or JavaScript build step.
 Node strips types; it does not type-check them. Linux supports the Ollama adapter.
 Windows is not supported; WSL can use its Linux tools.
