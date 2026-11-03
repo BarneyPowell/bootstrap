@@ -40,7 +40,7 @@ make install
 git hello
 ```
 
-The Makefile currently installs custom Git commands. The broader shell setup
+The Makefile installs custom commands and Git aliases. The broader shell setup
 described below still uses the legacy `install.sh`.
 
 Before installing commands, the `ensure-gum` prerequisite checks for `gum`.
@@ -63,6 +63,19 @@ immediately. Keep the clone in place so the symlinks continue to work.
 
 Repeated installs leave correct links alone. Conflicting files are reported
 without being overwritten; move them aside before retrying.
+
+### Git aliases
+
+Store Git aliases in `files/git-aliases.gitconfig` under `[alias]`.
+`make install` (or `make install-git-aliases`) adds a global Git include for that
+file, leaving other settings intact. Repeated installs do not duplicate the
+include. Edits to the aliases take effect immediately; keep the clone in place.
+
+The first alias is `git rebase-main`: it fetches `origin`, then rebases the
+current branch onto `origin/main` with `--autostash` to temporarily stash
+uncommitted changes and reapply them afterwards. Rebase or stash conflicts may
+need manual resolution. It assumes the remote is named `origin` and the branch
+is named `main`.
 
 ### AI-assisted commit messages
 
