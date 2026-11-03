@@ -1,0 +1,2 @@
+[alias]
+	rebase-main = !git fetch origin && git rebase --autostash refs/remotes/origin/main
