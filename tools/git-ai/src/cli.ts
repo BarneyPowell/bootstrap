@@ -23,7 +23,10 @@ async function main(): Promise<number> {
     return 0;
   }
   if (command === 'commit' && !options.dryRun && !options.yolo && (!process.stdin.isTTY || !process.stdout.isTTY))
-    throw new Failure('unavailable', 'Commit review requires an interactive terminal. Use --dry-run for generation without an editor.');
+    throw new Failure(
+      'unavailable',
+      'Commit review requires an interactive terminal. Use --dry-run for generation without an editor.',
+    );
   const config = await loadConfig(options, undefined, controller.signal);
   if (command === 'ollama-models') return await selectOllamaModel(config, scope ?? 'global', controller.signal, report);
   if (command === 'codex-models') return await selectCodexModel(config, scope ?? 'global', controller.signal, report);
@@ -32,16 +35,23 @@ async function main(): Promise<number> {
     // Styled output needs a terminal and gum; anything else (or any gum failure) prints plain lines.
     let styled = !options.plain && !!process.stderr.isTTY && !process.env.NO_COLOR;
     if (styled) {
-      try { await pickerDependency('gum', controller.signal); } catch { cancelled(controller.signal); styled = false; }
+      try {
+        await pickerDependency('gum', controller.signal);
+      } catch {
+        cancelled(controller.signal);
+        styled = false;
+      }
     }
     if (styled) process.stderr.write('\x1b[2mChecking providers…\x1b[0m');
     const doctor = await collectDoctor(config, controller.signal);
     if (styled) {
       process.stderr.write('\r\x1b[2K');
       try {
-        process.stderr.write(await renderDoctor(doctor, process.stderr.columns || 80, controller.signal) + '\n');
+        process.stderr.write((await renderDoctor(doctor, process.stderr.columns || 80, controller.signal)) + '\n');
         return 0;
-      } catch { cancelled(controller.signal); /* fall back to plain output */ }
+      } catch {
+        cancelled(controller.signal); /* fall back to plain output */
+      }
     }
     for (const line of plainLines(doctor)) report(line);
     return 0;
@@ -49,12 +59,17 @@ async function main(): Promise<number> {
   const git = new Git(undefined, controller.signal);
   const snapshot = await git.collect(config.recentCount);
   const propose = async (settings: typeof config): Promise<Proposal> => {
-    const proposal = await generateProposal(snapshot, settings, controller.signal, report, undefined, message => git.validateCleanup(message));
+    const proposal = await generateProposal(snapshot, settings, controller.signal, report, undefined, message =>
+      git.validateCleanup(message),
+    );
     await git.assertTree(snapshot.tree);
     return proposal;
   };
   let proposal = await propose(config);
-  if (options.dryRun) { process.stdout.write(proposal.message + '\n'); return 0; }
+  if (options.dryRun) {
+    process.stdout.write(proposal.message + '\n');
+    return 0;
+  }
   if (options.yolo) {
     // No review: show what is being committed, then commit it exactly as proposed.
     await showProposal(proposal, controller.signal);
@@ -86,16 +101,31 @@ async function commitProposal(git: Git, tree: string, message: string, edit: boo
   if (code !== 0) {
     try {
       const path = await git.text(['rev-parse', '--path-format=absolute', '--git-path', 'COMMIT_EDITMSG']);
-      report(`Git exited ${code}. If Git retained the edited message, find it at ${path}. No regeneration or commit retry was attempted.`);
+      report(
+        `Git exited ${code}. If Git retained the edited message, find it at ${path}. No regeneration or commit retry was attempted.`,
+      );
     } catch {
-      report(`Git exited ${code}. Check Git's COMMIT_EDITMSG for recovery. No regeneration or commit retry was attempted.`);
+      report(
+        `Git exited ${code}. Check Git's COMMIT_EDITMSG for recovery. No regeneration or commit retry was attempted.`,
+      );
     }
   }
   return code;
 }
 
-try { process.exitCode = await main(); }
-catch (error) {
-  report(error instanceof Failure ? `${error.kind}: ${error.message}` : 'Unexpected failure; raw diagnostics suppressed. Run git ai doctor.');
-  process.exitCode = controller.signal.aborted ? (controller.signal.reason === 'SIGTERM' ? 143 : 130) : error instanceof Failure && error.kind === 'cancelled' ? 130 : 1;
+try {
+  process.exitCode = await main();
+} catch (error) {
+  report(
+    error instanceof Failure
+      ? `${error.kind}: ${error.message}`
+      : 'Unexpected failure; raw diagnostics suppressed. Run git ai doctor.',
+  );
+  process.exitCode = controller.signal.aborted
+    ? controller.signal.reason === 'SIGTERM'
+      ? 143
+      : 130
+    : error instanceof Failure && error.kind === 'cancelled'
+      ? 130
+      : 1;
 }

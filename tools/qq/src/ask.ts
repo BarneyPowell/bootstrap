@@ -17,8 +17,14 @@ export class NoAnswer extends Failure<'no-answer'> {
 
 // Try each configured provider in order and return the first non-empty answer.
 // Only a configuration error or cancellation stops the search early.
-export async function ask(prompt: string, config: AiConfig, task: Task, signal: AbortSignal,
-  onAttempt: (name: ProviderName) => void = () => {}, factory: Factory = createAdapter): Promise<Answer> {
+export async function ask(
+  prompt: string,
+  config: AiConfig,
+  task: Task,
+  signal: AbortSignal,
+  onAttempt: (name: ProviderName) => void = () => {},
+  factory: Factory = createAdapter,
+): Promise<Answer> {
   const failures: string[] = [];
   for (const name of config.providers) {
     cancelled(signal);
@@ -35,7 +41,10 @@ export async function ask(prompt: string, config: AiConfig, task: Task, signal: 
       if (capabilities.locality === 'remote' && !config.allowCloud)
         throw new Failure('privacy-blocked', 'Remote inference is disabled by ai.allowCloud.');
       if (Buffer.byteLength(prompt) > capabilities.inputBytes)
-        throw new Failure('context-too-large', `The question and piped input exceed this provider's ${capabilities.inputBytes}-byte budget.`);
+        throw new Failure(
+          'context-too-large',
+          `The question and piped input exceed this provider's ${capabilities.inputBytes}-byte budget.`,
+        );
       const text = (await adapter.generate(prompt, providerSignal)).trim();
       cancelled(providerSignal);
       if (!text) throw new Failure('invalid-output', 'The provider returned an empty answer.');
@@ -44,10 +53,14 @@ export async function ask(prompt: string, config: AiConfig, task: Task, signal: 
       cancelled(signal);
       const failure = deadline.signal.aborted
         ? new Failure('timeout', `No answer within ${config.timeoutSeconds}s; raise qq.timeoutSeconds to wait longer.`)
-        : error instanceof Failure ? error : new Failure('transport/service-error', 'Provider failed; raw diagnostics suppressed.');
+        : error instanceof Failure
+          ? error
+          : new Failure('transport/service-error', 'Provider failed; raw diagnostics suppressed.');
       if (failure.kind === 'configuration-invalid' || failure.kind === 'cancelled') throw failure;
       failures.push(`${name}: ${failure.kind}: ${diagnostic(failure.message)}`);
-    } finally { clearTimeout(timer); }
+    } finally {
+      clearTimeout(timer);
+    }
   }
   throw new NoAnswer(failures);
 }

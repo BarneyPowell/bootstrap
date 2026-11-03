@@ -27,7 +27,11 @@ Oversized context can escalate to Codex: ai.commit.contextFallback=ask|auto|neve
 (default ask). Requires ai.allowCloud=true and an explicit ai.codex.model.
 `;
 
-export function parseArgs(args: string[]): { command: 'help' | 'version' | 'doctor' | 'commit' | 'ollama-models' | 'codex-models' | 'claude-models'; options: Overrides; scope?: 'global' | 'local' } {
+export function parseArgs(args: string[]): {
+  command: 'help' | 'version' | 'doctor' | 'commit' | 'ollama-models' | 'codex-models' | 'claude-models';
+  options: Overrides;
+  scope?: 'global' | 'local';
+} {
   if (args.length === 0 || (args.length === 1 && args[0] === '--help')) return { command: 'help', options: {} };
   if (args.length === 1 && args[0] === '--version') return { command: 'version', options: {} };
   if (args[0] === 'doctor') {
@@ -38,7 +42,9 @@ export function parseArgs(args: string[]): { command: 'help' | 'version' | 'doct
   if (['ollama', 'codex', 'claude'].includes(args[0]) && args[1] === 'models') {
     if (args.length > 3 || (args[2] !== undefined && !['--global', '--local'].includes(args[2])))
       throw new Failure('configuration-invalid', `Usage: git ai ${args[0]} models [--global|--local].`);
-    const command = ({ codex: 'codex-models', ollama: 'ollama-models', claude: 'claude-models' } as const)[args[0] as 'codex' | 'ollama' | 'claude'];
+    const command = ({ codex: 'codex-models', ollama: 'ollama-models', claude: 'claude-models' } as const)[
+      args[0] as 'codex' | 'ollama' | 'claude'
+    ];
     return { command, options: {}, scope: args[2] === '--local' ? 'local' : 'global' };
   }
   if (args[0] !== 'commit') throw new Failure('configuration-invalid', 'Unknown subcommand. Run git ai --help.');
@@ -48,18 +54,28 @@ export function parseArgs(args: string[]): { command: 'help' | 'version' | 'doct
     const flag = args[i];
     if (seen.has(flag)) throw new Failure('configuration-invalid', `Repeated option: ${flag}.`);
     seen.add(flag);
-    if (flag === '--dry-run') { options.dryRun = true; continue; }
-    if (flag === '--yolo') { options.yolo = true; continue; }
-    if (!['--provider', '--model', '--reasoning-effort'].includes(flag)) throw new Failure('configuration-invalid', `Unsupported option or pathspec: ${flag}. Run git ai --help.`);
+    if (flag === '--dry-run') {
+      options.dryRun = true;
+      continue;
+    }
+    if (flag === '--yolo') {
+      options.yolo = true;
+      continue;
+    }
+    if (!['--provider', '--model', '--reasoning-effort'].includes(flag))
+      throw new Failure('configuration-invalid', `Unsupported option or pathspec: ${flag}. Run git ai --help.`);
     const value = args[++i];
-    if (value === undefined || value.startsWith('--')) throw new Failure('configuration-invalid', `Missing value for ${flag}.`);
+    if (value === undefined || value.startsWith('--'))
+      throw new Failure('configuration-invalid', `Missing value for ${flag}.`);
     if (flag === '--provider') {
-      if (!providers.includes(value as ProviderName)) throw new Failure('configuration-invalid', 'Unknown provider; choose apple, ollama, codex, or claude.');
+      if (!providers.includes(value as ProviderName))
+        throw new Failure('configuration-invalid', 'Unknown provider; choose apple, ollama, codex, or claude.');
       options.provider = value as ProviderName;
     } else if (flag === '--model') options.model = value;
     else options.reasoningEffort = value;
   }
-  if (options.dryRun && options.yolo) throw new Failure('configuration-invalid', '--dry-run and --yolo cannot be combined.');
+  if (options.dryRun && options.yolo)
+    throw new Failure('configuration-invalid', '--dry-run and --yolo cannot be combined.');
   if ((options.model !== undefined || options.reasoningEffort !== undefined) && !options.provider)
     throw new Failure('configuration-invalid', '--model and --reasoning-effort require --provider.');
   return { command: 'commit', options };

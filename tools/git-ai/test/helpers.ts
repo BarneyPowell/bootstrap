@@ -6,10 +6,20 @@ import { execFileSync } from 'node:child_process';
 import type { Config } from '../src/config.ts';
 
 export const config = (overrides: Partial<Config> = {}): Config => ({
-  providers: ['apple', 'ollama', 'codex', 'claude'], allowCloud: false, timeoutSeconds: 2,
-  contextFallback: 'ask', pinned: false,
-  recentCount: 8, subjectMaxLength: 72, endpoint: 'http://127.0.0.1:11434',
-  maxContext: { apple: 4096, ollama: 8192 }, ollamaKeepAlive: '0', models: {}, efforts: {}, origins: {}, ...overrides,
+  providers: ['apple', 'ollama', 'codex', 'claude'],
+  allowCloud: false,
+  timeoutSeconds: 2,
+  contextFallback: 'ask',
+  pinned: false,
+  recentCount: 8,
+  subjectMaxLength: 72,
+  endpoint: 'http://127.0.0.1:11434',
+  maxContext: { apple: 4096, ollama: 8192 },
+  ollamaKeepAlive: '0',
+  models: {},
+  efforts: {},
+  origins: {},
+  ...overrides,
 });
 
 export function git(cwd: string, ...args: string[]): string {
@@ -18,7 +28,9 @@ export function git(cwd: string, ...args: string[]): string {
 
 export async function fixture(t: { after: (fn: () => Promise<void>) => void }): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), 'git-ai-test-'));
-  t.after(async () => { await rm(directory, { recursive: true, force: true }); });
+  t.after(async () => {
+    await rm(directory, { recursive: true, force: true });
+  });
   git(directory, 'init', '-q');
   git(directory, 'config', 'user.name', 'Test User');
   git(directory, 'config', 'user.email', 'test@example.invalid');
@@ -36,7 +48,9 @@ export async function stage(directory: string, name = 'file.txt', content = 'sta
 export async function fakeCodex(directory: string): Promise<NodeJS.ProcessEnv> {
   const bin = join(directory, 'codex-bin');
   await mkdir(bin);
-  await writeFile(join(bin, 'codex'), `#!/usr/bin/env node
+  await writeFile(
+    join(bin, 'codex'),
+    `#!/usr/bin/env node
 const fs = require('node:fs');
 const args = process.argv.slice(2);
 if (args[0] === '--version') { console.log('codex-cli 0.166.0'); process.exit(0); }
@@ -91,13 +105,17 @@ process.stdin.on('end', () => {
   else console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'PROTOCOL TEXT MUST NOT BE THE RESULT'}}));
   if (mode !== 'incomplete') console.log(JSON.stringify({type:'turn.completed',usage:{}}));
 });
-`, { mode: 0o700 });
+`,
+    { mode: 0o700 },
+  );
   return { PATH: `${bin}:${process.env.PATH}`, FAKE_CODEX_LOG: join(directory, 'codex-log') };
 }
 
 export async function fakeClaude(bin: string, directory: string): Promise<NodeJS.ProcessEnv> {
   const log = join(directory, 'claude-model-log');
-  await writeFile(join(bin, 'claude'), `#!/usr/bin/env node
+  await writeFile(
+    join(bin, 'claude'),
+    `#!/usr/bin/env node
 const fs = require('node:fs');
 const args = process.argv.slice(2);
 if (args.includes('--version')) { console.log('2.1.308 (Fake Claude Code)'); process.exit(0); }
@@ -124,6 +142,8 @@ process.stdin.on('end', () => {
     response:{models,account:{PRIVATE:'DO NOT PRINT ACCOUNT DATA'}}
   }}));
 });
-`, { mode: 0o700 });
+`,
+    { mode: 0o700 },
+  );
   return { FAKE_CLAUDE_LOG: log };
 }

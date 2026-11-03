@@ -11,14 +11,19 @@ const signal = () => new AbortController().signal;
 
 test('subprocess deadlines/cancellation terminate descendants and do not interpolate arguments', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'shared-test-'));
-  t.after(async () => { await rm(directory, { recursive: true, force: true }); });
+  t.after(async () => {
+    await rm(directory, { recursive: true, force: true });
+  });
   const marker = join(directory, 'marker');
   const arg = `$(touch ${marker})`;
   const literal = await run(process.execPath, ['-e', 'process.stdout.write(process.argv[1])', arg]);
   assert.equal(literal.stdout, arg);
   await assert.rejects(access(marker));
   const childScript = join(directory, 'child.cjs');
-  await writeFile(childScript, `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'leaked'), 600);`);
+  await writeFile(
+    childScript,
+    `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'leaked'), 600);`,
+  );
   const parent = `require('node:child_process').spawn(process.execPath, [${JSON.stringify(childScript)}], {stdio:'ignore'}); setInterval(()=>{}, 1000);`;
   await assert.rejects(run(process.execPath, ['-e', parent], { timeoutMs: 100 }), (e: any) => e.kind === 'timeout');
   await new Promise(resolve => setTimeout(resolve, 700));
@@ -31,8 +36,10 @@ test('subprocess deadlines/cancellation terminate descendants and do not interpo
 
 test('requireCommand passes for a working executable and gives the caller guidance otherwise', async () => {
   await requireCommand(process.execPath, 'unused', signal());
-  await assert.rejects(requireCommand('definitely-not-installed-xyz', 'Install it first.', signal()),
-    (e: unknown) => e instanceof Failure && e.kind === 'not-installed' && e.message === 'Install it first.');
+  await assert.rejects(
+    requireCommand('definitely-not-installed-xyz', 'Install it first.', signal()),
+    (e: unknown) => e instanceof Failure && e.kind === 'not-installed' && e.message === 'Install it first.',
+  );
 });
 
 test('table helpers shrink the widest column and never cut painted cells', () => {

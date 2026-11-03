@@ -40,19 +40,30 @@ export function parseArgs(args: string[]): Parsed {
   let i = 0;
   for (; i < args.length; i++) {
     const flag = args[i];
-    if (flag === '--') { i++; break; }
+    if (flag === '--') {
+      i++;
+      break;
+    }
     if (!flag.startsWith('-') || flag === '-') break;
     if (flag === '-h' || flag === '--help') return { command: 'help', options: {}, question: '' };
     if (flag === '--version') return { command: 'version', options: {}, question: '' };
     if (seen.has(flag)) throw new Failure('configuration-invalid', `Repeated option: ${flag}.`);
     seen.add(flag);
-    if (flag === '--plain') { options.plain = true; continue; }
+    if (flag === '--plain') {
+      options.plain = true;
+      continue;
+    }
     if (!['--provider', '--model', '--reasoning-effort'].includes(flag))
-      throw new Failure('configuration-invalid', `Unknown option: ${flag}. Run qq --help, or put -- before a question that starts with -.`);
+      throw new Failure(
+        'configuration-invalid',
+        `Unknown option: ${flag}. Run qq --help, or put -- before a question that starts with -.`,
+      );
     const value = args[++i];
-    if (value === undefined || value.startsWith('-')) throw new Failure('configuration-invalid', `Missing value for ${flag}.`);
+    if (value === undefined || value.startsWith('-'))
+      throw new Failure('configuration-invalid', `Missing value for ${flag}.`);
     if (flag === '--provider') {
-      if (!providers.includes(value as ProviderName)) throw new Failure('configuration-invalid', 'Unknown provider; choose apple, ollama, codex, or claude.');
+      if (!providers.includes(value as ProviderName))
+        throw new Failure('configuration-invalid', 'Unknown provider; choose apple, ollama, codex, or claude.');
       options.provider = value as ProviderName;
     } else if (flag === '--model') options.model = value;
     else options.reasoningEffort = value;

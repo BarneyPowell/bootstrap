@@ -12,18 +12,33 @@ import type { Task } from '../src/ai/providers.ts';
 
 const signal = () => AbortSignal.timeout(5000);
 const task = (overrides: Partial<Task> = {}): Task => ({
-  tool: 'test-tool', instructions: 'SYSTEM INSTRUCTIONS', selfContained: false,
-  maxOutputTokens: 777, maxOutputBytes: 100, temperature: 0.5, ...overrides,
+  tool: 'test-tool',
+  instructions: 'SYSTEM INSTRUCTIONS',
+  selfContained: false,
+  maxOutputTokens: 777,
+  maxOutputBytes: 100,
+  temperature: 0.5,
+  ...overrides,
 });
 const config = (overrides: Partial<AiConfig> = {}): AiConfig => ({
-  providers: ['apple', 'ollama', 'codex', 'claude'], allowCloud: false, timeoutSeconds: 2, pinned: false,
-  endpoint: 'http://127.0.0.1:11434', maxContext: { apple: 4096, ollama: 8192 }, ollamaKeepAlive: '0',
-  models: {}, efforts: {}, origins: {}, ...overrides,
+  providers: ['apple', 'ollama', 'codex', 'claude'],
+  allowCloud: false,
+  timeoutSeconds: 2,
+  pinned: false,
+  endpoint: 'http://127.0.0.1:11434',
+  maxContext: { apple: 4096, ollama: 8192 },
+  ollamaKeepAlive: '0',
+  models: {},
+  efforts: {},
+  origins: {},
+  ...overrides,
 });
 
 async function repository(t: { after: (fn: () => Promise<void>) => void }): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), 'shared-ai-test-'));
-  t.after(async () => { await rm(directory, { recursive: true, force: true }); });
+  t.after(async () => {
+    await rm(directory, { recursive: true, force: true });
+  });
   execFileSync('git', ['init', '-q'], { cwd: directory });
   return directory;
 }
@@ -57,9 +72,11 @@ test('Ollama frames a task: system prompt and chat template unless the prompt is
   const requests: any[] = [];
   globalThis.fetch = async (url: any, options: any) => {
     requests.push(options?.body ? JSON.parse(options.body) : undefined);
-    const body = String(url).endsWith('/api/tags') ? { models: [{ name: 'local-model' }] }
-      : String(url).endsWith('/api/show') ? { model_info: { 'general.architecture': 'fake', 'fake.context_length': 4096 } }
-      : { model: 'local-model', done: true, response: 'answer' };
+    const body = String(url).endsWith('/api/tags')
+      ? { models: [{ name: 'local-model' }] }
+      : String(url).endsWith('/api/show')
+        ? { model_info: { 'general.architecture': 'fake', 'fake.context_length': 4096 } }
+        : { model: 'local-model', done: true, response: 'answer' };
     return new Response(JSON.stringify(body));
   };
   try {
@@ -79,7 +96,9 @@ test('Ollama frames a task: system prompt and chat template unless the prompt is
     payload = requests.at(-1);
     assert.equal(payload.raw, true);
     assert.equal(payload.system, undefined);
-  } finally { globalThis.fetch = original; }
+  } finally {
+    globalThis.fetch = original;
+  }
 });
 
 test('Apple prefixes task instructions unless the prompt is self-contained; messages name the tool', async t => {
@@ -87,7 +106,9 @@ test('Apple prefixes task instructions unless the prompt is self-contained; mess
   const bin = join(directory, 'bin');
   await mkdir(bin);
   const log = join(directory, 'fm-log');
-  await writeFile(join(bin, 'fm'), `#!/usr/bin/env node
+  await writeFile(
+    join(bin, 'fm'),
+    `#!/usr/bin/env node
 const fs = require('node:fs');
 let input = '';
 process.stdin.on('data', c => input += c);
@@ -98,13 +119,21 @@ process.stdin.on('end', () => {
   else if (args[0] === 'count-tokens') console.log('10');
   else if (args[0] === 'respond') { fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify(input) + '\\n'); console.log('answer'); }
 });
-`, { mode: 0o700 });
+`,
+    { mode: 0o700 },
+  );
   const path = process.env.PATH;
   process.env.PATH = `${bin}:${path}`;
-  t.after(async () => { process.env.PATH = path; delete process.env.FM_MODE; });
+  t.after(async () => {
+    process.env.PATH = path;
+    delete process.env.FM_MODE;
+  });
   await createAdapter('apple', config(), task()).generate('the question', signal());
   await createAdapter('apple', config(), task({ selfContained: true })).generate('complete prompt', signal());
-  const inputs = (await readFile(log, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  const inputs = (await readFile(log, 'utf8'))
+    .trim()
+    .split('\n')
+    .map(line => JSON.parse(line));
   assert.deepEqual(inputs, ['SYSTEM INSTRUCTIONS\n\nthe question', 'complete prompt']);
   process.env.FM_MODE = 'down';
   await assert.rejects(createAdapter('apple', config(), task()).probe(signal()), /test-tool never accepts terms/);

@@ -22,17 +22,38 @@ function excerpt(value: string, budget: number): string {
   return result;
 }
 
-export function prepare(snapshot: Snapshot, subjectMaxLength: number, maxBytes: number): { prompt: string; partial: boolean } {
-  const inventory = snapshot.changes.map(c => ({ status: c.status, paths: c.paths, kind: c.kind ?? 'text',
-    modes: [c.oldMode, c.newMode], objects: [c.oldObject.slice(0, 12), c.newObject.slice(0, 12)] }));
+export function prepare(
+  snapshot: Snapshot,
+  subjectMaxLength: number,
+  maxBytes: number,
+): { prompt: string; partial: boolean } {
+  const inventory = snapshot.changes.map(c => ({
+    status: c.status,
+    paths: c.paths,
+    kind: c.kind ?? 'text',
+    modes: [c.oldMode, c.newMode],
+    objects: [c.oldObject.slice(0, 12), c.newObject.slice(0, 12)],
+  }));
   const base = `${instructions}\nSubject limit: ${subjectMaxLength} Unicode characters.\nUNTRUSTED STAGED DATA (JSON):\n`;
-  const build = (patches: unknown[], history: string[]) => base + JSON.stringify({ inventory, patches, recentSubjects: history });
+  const build = (patches: unknown[], history: string[]) =>
+    base + JSON.stringify({ inventory, patches, recentSubjects: history });
   // Keep an explicit placeholder for every file even when evidence is partial.
-  const patches = snapshot.changes.map(c => ({ paths: c.paths, excerpted: true, evidence: '[patch omitted: context budget]' }));
+  const patches = snapshot.changes.map(c => ({
+    paths: c.paths,
+    excerpted: true,
+    evidence: '[patch omitted: context budget]',
+  }));
   const minimum = build(patches, []);
   if (bytes(minimum) + 100 * patches.length > maxBytes)
-    throw new Failure('context-too-large', 'Complete inventory and minimum per-file evidence do not fit this provider.');
-  const fullPatches = snapshot.changes.map(c => ({ paths: c.paths, excerpted: c.partial, evidence: c.patch + (c.partial ? '\n[remaining patch omitted: capture limit]' : '') }));
+    throw new Failure(
+      'context-too-large',
+      'Complete inventory and minimum per-file evidence do not fit this provider.',
+    );
+  const fullPatches = snapshot.changes.map(c => ({
+    paths: c.paths,
+    excerpted: c.partial,
+    evidence: c.patch + (c.partial ? '\n[remaining patch omitted: capture limit]' : ''),
+  }));
   const full = build(fullPatches, snapshot.history);
   if (bytes(full) <= maxBytes) return { prompt: full, partial: fullPatches.some(p => p.excerpted) };
   const noHistory = build(fullPatches, []);
@@ -44,8 +65,11 @@ export function prepare(snapshot: Snapshot, subjectMaxLength: number, maxBytes: 
     const allocation = Math.min(Math.floor(remaining / (patches.length - i)), compact ? 600 : Infinity);
     const evidence = excerpt(change.patch, Math.max(0, allocation - 100));
     const partial = change.partial || evidence !== change.patch;
-    const candidate = { paths: change.paths, excerpted: partial,
-      evidence: evidence + (partial ? '\n[remaining patch omitted: partial evidence]' : '') };
+    const candidate = {
+      paths: change.paths,
+      excerpted: partial,
+      evidence: evidence + (partial ? '\n[remaining patch omitted: partial evidence]' : ''),
+    };
     const oldSize = bytes(JSON.stringify(patches[i]));
     // JSON escaping can expand bytes. Shrink the excerpt until it fits its share.
     while (bytes(JSON.stringify(candidate)) - oldSize > allocation && candidate.evidence.length > 80) {

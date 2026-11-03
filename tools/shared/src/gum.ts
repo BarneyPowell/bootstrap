@@ -9,7 +9,12 @@ export const requireGum = (signal: AbortSignal) =>
 // Run gum for its rendered text. gum drops colour when its output is a pipe, so
 // colour is forced; callers write the captured text to the terminal themselves.
 export async function gumText(args: string[], signal: AbortSignal, input?: string): Promise<string> {
-  const result = await run('gum', args, { signal, input, env: { ...process.env, CLICOLOR_FORCE: '1' }, timeoutMs: 5000 });
+  const result = await run('gum', args, {
+    signal,
+    input,
+    env: { ...process.env, CLICOLOR_FORCE: '1' },
+    timeoutMs: 5000,
+  });
   if (result.code !== 0) throw new Failure('unavailable', 'gum rendering failed.');
   return result.stdout.replace(/\n$/, '');
 }
@@ -17,9 +22,24 @@ export async function gumText(args: string[], signal: AbortSignal, input?: strin
 // Ask a yes/no question on the terminal. No and Esc both answer 'no'; Ctrl+C is 'cancel'.
 // A safe default starts the prompt on the negative answer.
 export type ConfirmOptions = { affirmative: string; negative: string; safeDefault: boolean };
-export async function confirm(prompt: string, options: ConfirmOptions, signal: AbortSignal): Promise<'yes' | 'no' | 'cancel'> {
-  const result = await run('gum', ['confirm', `--affirmative=${options.affirmative}`, `--negative=${options.negative}`,
-    `--default=${options.safeDefault ? 'false' : 'true'}`, '--timeout=0s', '--', prompt], { signal, interactive: true, timeoutMs: 0, limit: 4096 });
+export async function confirm(
+  prompt: string,
+  options: ConfirmOptions,
+  signal: AbortSignal,
+): Promise<'yes' | 'no' | 'cancel'> {
+  const result = await run(
+    'gum',
+    [
+      'confirm',
+      `--affirmative=${options.affirmative}`,
+      `--negative=${options.negative}`,
+      `--default=${options.safeDefault ? 'false' : 'true'}`,
+      '--timeout=0s',
+      '--',
+      prompt,
+    ],
+    { signal, interactive: true, timeoutMs: 0, limit: 4096 },
+  );
   cancelled(signal);
   if (result.code === 0) return 'yes';
   if (result.code === 1) return 'no';
@@ -28,7 +48,8 @@ export async function confirm(prompt: string, options: ConfirmOptions, signal: A
 }
 
 // Text is passed after `--` as a plain argument: never a template, never a flag.
-export const styleText = (signal: AbortSignal, text: string, ...flags: string[]) => gumText(['style', ...flags, '--', text], signal);
+export const styleText = (signal: AbortSignal, text: string, ...flags: string[]) =>
+  gumText(['style', ...flags, '--', text], signal);
 
 const ansi = /\x1b\[[0-9;]*m/g;
 export const visible = (text: string) => [...text.replace(ansi, '')].length;
@@ -55,8 +76,22 @@ export function truncate(cell: string, limit: number): string {
 
 export async function table(signal: AbortSignal, headers: string[], rows: string[][], width: number): Promise<string> {
   const widths = fitWidths(headers, rows, width);
-  const csv = rows.map(row => row.map((cell, i) => `"${truncate(cell, widths[i]).replace(/"/g, '""')}"`).join(',')).join('\n');
-  return await gumText(['table', '--print', '--border=rounded', `--columns=${headers.join(',')}`,
-    `--widths=${widths.join(',')}`, `--border.foreground=${palette.rule}`,
-    `--header.foreground=${palette.accent}`, `--cell.foreground=${palette.text}`, '--selected.foreground='], signal, csv);
+  const csv = rows
+    .map(row => row.map((cell, i) => `"${truncate(cell, widths[i]).replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+  return await gumText(
+    [
+      'table',
+      '--print',
+      '--border=rounded',
+      `--columns=${headers.join(',')}`,
+      `--widths=${widths.join(',')}`,
+      `--border.foreground=${palette.rule}`,
+      `--header.foreground=${palette.accent}`,
+      `--cell.foreground=${palette.text}`,
+      '--selected.foreground=',
+    ],
+    signal,
+    csv,
+  );
 }

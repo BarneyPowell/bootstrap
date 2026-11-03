@@ -6,7 +6,8 @@ export type { ProviderName };
 export type Overrides = AiOverrides & { dryRun?: boolean; yolo?: boolean; plain?: boolean };
 export type Config = AiConfig & {
   contextFallback: 'ask' | 'auto' | 'never';
-  recentCount: number; subjectMaxLength: number;
+  recentCount: number;
+  subjectMaxLength: number;
 };
 
 export async function loadConfig(overrides: Overrides = {}, cwd?: string, signal?: AbortSignal): Promise<Config> {

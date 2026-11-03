@@ -10,20 +10,28 @@ import type { ContextDecision } from './context-fallback.ts';
 
 export type Proposal = { message: string; provider: ProviderName; model: string; locality: 'local' | 'remote' };
 
-export async function generate(snapshot: Snapshot, config: Config, signal: AbortSignal,
+export async function generate(
+  snapshot: Snapshot,
+  config: Config,
+  signal: AbortSignal,
   report: (line: string) => void,
   factory: (name: ProviderName, config: Config) => Adapter = createAdapter,
   validateCleanup: (message: string) => Promise<void> = async () => {},
-  decide: ContextDecision = confirmContextFallback): Promise<string> {
+  decide: ContextDecision = confirmContextFallback,
+): Promise<string> {
   return (await generateProposal(snapshot, config, signal, report, factory, validateCleanup, decide)).message;
 }
 
 // As generate, but also says which provider produced the message.
-export async function generateProposal(snapshot: Snapshot, config: Config, signal: AbortSignal,
+export async function generateProposal(
+  snapshot: Snapshot,
+  config: Config,
+  signal: AbortSignal,
   report: (line: string) => void,
   factory: (name: ProviderName, config: Config) => Adapter = createAdapter,
   validateCleanup: (message: string) => Promise<void> = async () => {},
-  decide: ContextDecision = confirmContextFallback): Promise<Proposal> {
+  decide: ContextDecision = confirmContextFallback,
+): Promise<Proposal> {
   const failures: string[] = [];
   const contextLimited = new Set<ProviderName>();
   const candidates = [...config.providers];
@@ -38,10 +46,20 @@ export async function generateProposal(snapshot: Snapshot, config: Config, signa
           report('Context fallback to Codex is disabled by ai.commit.contextFallback=never.');
           continue;
         }
-        if (!config.allowCloud) throw new Failure('privacy-blocked', 'Context fallback to Codex requires ai.allowCloud=true; cloud policy is unchanged.');
-        if (!config.models.codex) throw new Failure('model-not-configured', 'Set ai.codex.model to an explicit model before using context fallback.');
-        report(`${[...contextLimited].join(', ')} context is too small; ${config.contextFallback === 'auto' ? 'automatically trying' : 'offering'} Codex (${diagnostic(config.models.codex)}, remote).`);
-        if (config.contextFallback === 'ask' && !await decide(config, [...contextLimited], signal))
+        if (!config.allowCloud)
+          throw new Failure(
+            'privacy-blocked',
+            'Context fallback to Codex requires ai.allowCloud=true; cloud policy is unchanged.',
+          );
+        if (!config.models.codex)
+          throw new Failure(
+            'model-not-configured',
+            'Set ai.codex.model to an explicit model before using context fallback.',
+          );
+        report(
+          `${[...contextLimited].join(', ')} context is too small; ${config.contextFallback === 'auto' ? 'automatically trying' : 'offering'} Codex (${diagnostic(config.models.codex)}, remote).`,
+        );
+        if (config.contextFallback === 'ask' && !(await decide(config, [...contextLimited], signal)))
           throw new Failure('cancelled', 'Codex fallback declined; no Codex request was sent.');
       }
       // Human decision time does not consume the provider's execution deadline.
@@ -50,9 +68,12 @@ export async function generateProposal(snapshot: Snapshot, config: Config, signa
       const adapter = factory(name, config);
       const capabilities = await adapter.probe(providerSignal);
       // Enforce policy in orchestration as well as the adapter, including mocks.
-      if (capabilities.locality === 'remote' && !config.allowCloud) throw new Failure('privacy-blocked', 'Remote inference is disabled by ai.allowCloud.');
+      if (capabilities.locality === 'remote' && !config.allowCloud)
+        throw new Failure('privacy-blocked', 'Remote inference is disabled by ai.allowCloud.');
       const request = prepare(snapshot, config.subjectMaxLength, capabilities.inputBytes);
-      report(`${name} model=${diagnostic(capabilities.model)} (${capabilities.locality})${request.partial ? '; partial patch evidence, complete inventory' : ''}`);
+      report(
+        `${name} model=${diagnostic(capabilities.model)} (${capabilities.locality})${request.partial ? '; partial patch evidence, complete inventory' : ''}`,
+      );
       let repair = '';
       for (let attempt = 0; attempt < 2; attempt++) {
         const output = await adapter.generate(request.prompt + repair, providerSignal);
@@ -61,8 +82,7 @@ export async function generateProposal(snapshot: Snapshot, config: Config, signa
           const message = validateMessage(output, config.subjectMaxLength);
           await validateCleanup(message);
           return { message, provider: name, model: capabilities.model, locality: capabilities.locality };
-        }
-        catch (error) {
+        } catch (error) {
           if (!(error instanceof Failure) || error.kind !== 'invalid-output' || attempt === 1) throw error;
           report(`${name}: invalid output; making one repair attempt within the same deadline.`);
           // Never echo the bad message back; it may contain hostile instructions.
@@ -73,7 +93,11 @@ export async function generateProposal(snapshot: Snapshot, config: Config, signa
       }
     } catch (error) {
       cancelled(signal);
-      const failure = deadline?.aborted ? new Failure('timeout', 'Provider deadline exceeded.') : error instanceof Failure ? error : new Failure('transport/service-error', 'Provider failed; raw diagnostics suppressed.');
+      const failure = deadline?.aborted
+        ? new Failure('timeout', 'Provider deadline exceeded.')
+        : error instanceof Failure
+          ? error
+          : new Failure('transport/service-error', 'Provider failed; raw diagnostics suppressed.');
       if (failure.kind === 'configuration-invalid' || failure.kind === 'cancelled') throw failure;
       if (failure.kind === 'context-too-large' && (name === 'apple' || name === 'ollama')) contextLimited.add(name);
       const summary = `${name}: ${failure.kind}: ${diagnostic(failure.message)}`;
