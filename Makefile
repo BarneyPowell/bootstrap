@@ -1,16 +1,22 @@
-.PHONY: help install install-commands install-git-aliases install-git ensure-gum test test-shared test-git-ai test-git-tidy test-git-wt test-qq check lint lint-ts lint-shell lint-workflows ci
+.PHONY: help install install-commands install-git-aliases install-git ensure-gum test test-shared test-git-ai test-git-tidy test-git-wt test-qq check lint lint-ts lint-shell lint-workflows ci fmt fmt-check
 
 SHELL_SCRIPTS := install.sh $(wildcard scripts/*.sh scripts/git/git-* scripts/bin/*)
 BIN := node_modules/.bin
+# Quoted so oxfmt, not the shell, expands the glob.
+TS_FILES := 'tools/**/*.ts'
+NEED_NPM = @test -x $(BIN)/tsc || { echo 'Missing dev tools: run npm ci first.' >&2; exit 1; }
+NEED_SHELL_TOOLS = @command -v shellcheck >/dev/null && command -v shfmt >/dev/null || { echo 'Install shellcheck and shfmt (brew bundle, or apt install shellcheck shfmt).' >&2; exit 1; }
 
 help:
 	@echo 'make install      install repository-managed configuration and commands'
 	@echo 'make install-commands  symlink custom commands (git-*, qq) into ~/.local/bin'
 	@echo 'make install-git-aliases  include repository-managed Git aliases globally'
 	@echo 'make ensure-gum   offer to install gum for the terminal UI'
-	@echo 'make lint         type-check and lint TypeScript, lint shell scripts (npm ci first)'
-	@echo 'make lint-ts      type-check with tsc and lint with oxlint'
-	@echo 'make lint-shell   run ShellCheck and shfmt (check only) on shell scripts'
+	@echo 'make lint         type-check, lint and format-check everything (npm ci first)'
+	@echo 'make lint-ts      type-check with tsc, lint with oxlint, check formatting with oxfmt'
+	@echo 'make lint-shell   run ShellCheck and check formatting with shfmt'
+	@echo 'make fmt          format TypeScript (oxfmt) and shell scripts (shfmt) in place'
+	@echo 'make fmt-check    check formatting only, without writing'
 	@echo 'make check        same as make lint-shell'
 	@echo 'make lint-workflows  run actionlint on the GitHub Actions workflows'
 	@echo 'make ci           run make lint, then make test'
@@ -38,13 +44,26 @@ ensure-gum:
 lint: lint-ts lint-shell
 
 lint-ts:
-	@test -x $(BIN)/tsc || { echo 'Missing dev tools: run npm ci first.' >&2; exit 1; }
+	$(NEED_NPM)
 	@$(BIN)/tsc -p .
 	@$(BIN)/oxlint --type-aware --deny-warnings tools
+	@$(BIN)/oxfmt --check $(TS_FILES)
 
 lint-shell:
-	@command -v shellcheck >/dev/null && command -v shfmt >/dev/null || { echo 'Install shellcheck and shfmt (brew bundle, or apt install shellcheck shfmt).' >&2; exit 1; }
+	$(NEED_SHELL_TOOLS)
 	@shellcheck $(SHELL_SCRIPTS)
+	@shfmt -d $(SHELL_SCRIPTS)
+
+fmt:
+	$(NEED_NPM)
+	$(NEED_SHELL_TOOLS)
+	@$(BIN)/oxfmt $(TS_FILES)
+	@shfmt -w $(SHELL_SCRIPTS)
+
+fmt-check:
+	$(NEED_NPM)
+	$(NEED_SHELL_TOOLS)
+	@$(BIN)/oxfmt --check $(TS_FILES)
 	@shfmt -d $(SHELL_SCRIPTS)
 
 # Not part of make lint: actionlint is not packaged for every platform. CI runs it separately.
