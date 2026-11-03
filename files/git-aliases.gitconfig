@@ -1,2 +1,8 @@
 [alias]
+	bh = "!git for-each-ref --sort='-authordate' --format='%(authordate)%09%(objectname:short)%09%(refname)' refs/heads | sed -e 's-refs/heads/--'"
+	gl = config --global -l
+	last = log -1 HEAD --stat
 	rebase-main = !git fetch origin && git rebase --autostash refs/remotes/origin/main
+	la = !git config --list | grep ^alias\\. | cut -c 7- | grep -Ei --color \"$1\" "#" # List aliases
+	ll = log --oneline --graph --decorate --all
+	yolo = "!git add -A && git ai commit --provider claude --yolo && git push"
