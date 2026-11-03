@@ -1,4 +1,4 @@
-.PHONY: help install install-commands install-git ensure-gum test test-shared test-git-ai test-git-tidy test-qq check
+.PHONY: help install install-commands install-git ensure-gum test test-shared test-git-ai test-git-tidy test-git-wt test-qq check
 
 help:
 	@echo 'make install      install repository-managed configuration and commands'
@@ -8,6 +8,7 @@ help:
 	@echo 'make test-shared   run tests for helpers shared by the tools'
 	@echo 'make test-git-ai   run isolated git-ai tests (no live inference)'
 	@echo 'make test-git-tidy run isolated git-tidy tests (temporary repositories only)'
+	@echo 'make test-git-wt  run isolated git-wt tests (temporary repositories only)'
 	@echo 'make test-qq      run isolated qq tests (fake providers only)'
 	@echo 'make test         run every test suite'
 
@@ -31,10 +32,13 @@ test-git-ai:
 test-git-tidy:
 	@cd tools/git-tidy && node --test test/*.test.ts
 
+test-git-wt:
+	@cd tools/git-wt && node --test test/*.test.ts
+
 test-qq:
 	@cd tools/qq && node --test test/*.test.ts
 
-test: test-shared test-git-ai test-git-tidy test-qq
+test: test-shared test-git-ai test-git-tidy test-git-wt test-qq
 
 test-shared:
 	@cd tools/shared && node --test test/*.test.ts
