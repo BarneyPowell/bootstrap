@@ -102,6 +102,14 @@ none start selected. Run `git tidy --dry-run` to list the branches without
 changing anything. See the [git-tidy guide](tools/git-tidy/README.md) for the safety
 rules.
 
+### Worktree per branch
+
+`git wt <branch>` checks out a branch in a sibling worktree and prints its path,
+so `cd "$(git wt feature/ABC-123_name)"` puts you in it. A branch on origin is
+fetched and tracked. A branch that is new is created from origin's default
+branch, after a confirmation. It works with bare clones (`root/.bare`) and
+normal checkouts (`root/repo`). See the [git-wt guide](tools/git-wt/README.md).
+
 ### Quick questions
 
 `qq` asks an AI provider one question and prints the answer, formatted with gum:

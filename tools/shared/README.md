@@ -11,7 +11,9 @@ from each other. When a helper is needed in a second tool, move it here.
 | `src/ai/config.ts` | `loadAiConfig()`: the provider settings `git ai` and `qq` share (`ai.providers`, `ai.allowCloud`, `ai.<provider>.model`, …). A tool can pass a scope such as `qq` so that `qq.providers` and `qq.timeoutSeconds` take precedence. `configReader()` reads Git config and records where each key came from. |
 | `src/ai/providers.ts` | `createAdapter(name, config, task)` for apple, ollama, codex and claude. A `Task` gives the tool name, system instructions and output limits. A `selfContained` prompt (git-ai's) already carries its instructions. Also `httpJSON()`, `isLoopback()` and `executableVersion()`. |
 | `src/ai/claude.ts`, `src/ai/codex.ts` | The constrained Claude Code and Codex CLI integrations: private working directory, no tools, verified session constraints. |
-| `src/gum.ts` | `requireGum()`, `gumText()` and `styleText()`. Also the shared colour palette, `paint()`, and `table()` with its width helpers. |
+| `src/git.ts` | `Repo`: run Git in one repository without a pager or colour. `capture()` returns the result; `text()` returns stdout or fails with a `git-error`. |
+| `src/gum.ts` | `requireGum()`, `gumText()`, `styleText()` and `confirm()` (yes, no or cancel). Also the shared colour palette, `paint()`, and `table()` with its width helpers. |
+| `src/terminal.ts` | `colour(stream)`: true on a terminal unless `NO_COLOR` is set. `Spinner`: a stderr spinner that draws only on a terminal. |
 | `test/git-env.ts` | Import it first in every test file. It keeps tests away from the real Git config and repository environment. |
 | `test/pty_driver.py` | Gives a command under test a real terminal. |
 
