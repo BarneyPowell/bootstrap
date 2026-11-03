@@ -136,7 +136,7 @@ ask() {
     read -r reply <&3 || true
     exec 3<&-
     case "$reply" in
-      y|Y|yes|YES) return 0 ;;
+      y | Y | yes | YES) return 0 ;;
       *) return 1 ;;
     esac
   fi
@@ -354,11 +354,11 @@ install_gum_from_github_release() {
   fi
 
   case "$(uname -m)" in
-    x86_64|amd64) arch="x86_64" ;;
-    aarch64|arm64) arch="arm64" ;;
+    x86_64 | amd64) arch="x86_64" ;;
+    aarch64 | arm64) arch="arm64" ;;
     armv7l) arch="armv7" ;;
     armv6l) arch="armv6" ;;
-    i386|i686) arch="i386" ;;
+    i386 | i686) arch="i386" ;;
     *)
       warn "Unsupported architecture for gum release install: $(uname -m)"
       return 1
@@ -425,7 +425,7 @@ ensure_gum_early() {
   fi
 
   case "$(os_name)" in
-    linux|wsl)
+    linux | wsl)
       if ask "Install gum for nicer setup prompts?"; then
         if apt_available && apt_has_package gum; then
           if apt_install_packages gum; then
@@ -452,7 +452,7 @@ ensure_zsh() {
     log "zsh already installed: $(command -v zsh)"
   else
     case "$(os_name)" in
-      linux|wsl)
+      linux | wsl)
         if apt_available && ask "Install zsh with apt?"; then
           apt_install_packages zsh
         else
@@ -519,7 +519,7 @@ brew_prefix_guess() {
   fi
 
   case "$(uname -m)" in
-    arm64|aarch64) printf '/opt/homebrew' ;;
+    arm64 | aarch64) printf '/opt/homebrew' ;;
     *) printf '/usr/local' ;;
   esac
 }
@@ -799,7 +799,7 @@ PY
     if [[ "$DRY_RUN" == 1 ]]; then
       printf 'DRY-RUN: append managed block to %s\n' "$zshrc"
     else
-      printf '\n%s\n' "$block" >> "$zshrc"
+      printf '\n%s\n' "$block" >>"$zshrc"
     fi
   fi
 }
@@ -807,8 +807,8 @@ PY
 main() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -y|--yes) ASSUME_YES=1 ;;
-      -n|--dry-run) DRY_RUN=1 ;;
+      -y | --yes) ASSUME_YES=1 ;;
+      -n | --dry-run) DRY_RUN=1 ;;
       --no-brew) DO_BREW=0 ;;
       --no-tools) DO_TOOLS=0 ;;
       --no-omz) DO_OMZ=0 ;;
@@ -816,8 +816,15 @@ main() {
       --no-fonts) DO_FONTS=0 ;;
       --no-optional) DO_OPTIONAL=0 ;;
       --no-chsh) DO_CHSH=0 ;;
-      -h|--help) usage; exit 0 ;;
-      *) err "Unknown option: $1"; usage; exit 2 ;;
+      -h | --help)
+        usage
+        exit 0
+        ;;
+      *)
+        err "Unknown option: $1"
+        usage
+        exit 2
+        ;;
     esac
     shift
   done

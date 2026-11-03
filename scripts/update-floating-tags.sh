@@ -97,7 +97,7 @@ point_tag_at() {
 main() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -n|--dry-run) DRY_RUN=1 ;;
+      -n | --dry-run) DRY_RUN=1 ;;
       --push) PUSH=1 ;;
       --remote)
         shift
@@ -107,8 +107,15 @@ main() {
         fi
         REMOTE="$1"
         ;;
-      -h|--help) usage; exit 0 ;;
-      *) err "Unknown option: $1"; usage; exit 2 ;;
+      -h | --help)
+        usage
+        exit 0
+        ;;
+      *)
+        err "Unknown option: $1"
+        usage
+        exit 2
+        ;;
     esac
     shift
   done

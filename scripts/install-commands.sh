@@ -40,7 +40,7 @@ done
 path_setting='  export PATH="$HOME/.local/bin:$PATH"'
 if ! grep -qxF "$path_setting" "$zshrc" 2>/dev/null; then
   mkdir -p "$(dirname -- "$zshrc")"
-  cat >> "$zshrc" <<'ZSH'
+  cat >>"$zshrc" <<'ZSH'
 
 # Custom commands installed by the bootstrap repository.
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
@@ -53,7 +53,7 @@ fi
 # found" before qq runs. noglob passes them through as typed.
 qq_alias="alias qq='noglob qq'"
 if ! grep -qxF "$qq_alias" "$zshrc" 2>/dev/null; then
-  cat >> "$zshrc" <<'ZSH'
+  cat >>"$zshrc" <<'ZSH'
 
 # qq (bootstrap repository): pass ? and * in questions through unexpanded.
 alias qq='noglob qq'
