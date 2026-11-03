@@ -126,7 +126,8 @@ main() {
   fi
 
   log "Fetching tags"
-  run git fetch --tags "$REMOTE"
+  # --force: floating tags move, so a local copy may be out of date.
+  run git fetch --tags --force "$REMOTE"
 
   local tags
   tags="$(exact_tags || true)"

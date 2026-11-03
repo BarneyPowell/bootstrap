@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "791b1435ba7a935767787424e1647dba44bdae3e",
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "include-component-in-tag": false,
+      "extra-files": ["install.sh", { "type": "generic", "path": "README.md" }]
+    }
+  }
+}

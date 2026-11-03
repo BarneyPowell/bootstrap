@@ -35,12 +35,25 @@ The script is designed to be idempotent: running it repeatedly should not duplic
 
 ### Custom Git commands from a local clone
 
-Clone this repository, change into it, and run:
+Clone the `stable` branch, which always holds the latest release, then install:
 
 ```sh
+git clone -b stable https://github.com/BarneyPowell/bootstrap.git
+cd bootstrap
 make install
 git hello
 ```
+
+Run `git pull` in the clone to update to a newer release; the installed commands
+are symlinks into it, so they update too. To pin a release instead, clone its tag:
+
+<!-- x-release-please-start-version -->
+```sh
+git clone -b v1.2.2 https://github.com/BarneyPowell/bootstrap.git
+```
+<!-- x-release-please-end -->
+
+Clone `main` for the latest development version.
 
 The Makefile installs custom commands and Git aliases. The broader shell setup
 described below still uses the legacy `install.sh`.
@@ -146,10 +159,10 @@ See the [qq guide](tools/qq/README.md) for setup and for what is sent.
 
 ### Legacy installer usage
 
-Use a version tag for repeatable installs. `v1.2` will always mean the latest v1.2.x installer:
+Use a version tag for repeatable installs. `v1` always means the latest v1.x installer:
 
 ```sh
-curl -fsSLO https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1.2/install.sh
+curl -fsSLO https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1/install.sh
 less install.sh
 bash install.sh --dry-run
 bash install.sh
@@ -157,10 +170,10 @@ bash install.sh
 
 ## One-liner usage
 
-Stable v1.2:
+Stable v1:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1.2/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1/install.sh | bash
 ```
 
 Latest from `main`:
@@ -169,52 +182,73 @@ Latest from `main`:
 curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/main/install.sh | bash
 ```
 
-For non-interactive stable v1.2 setup:
+For non-interactive stable v1 setup:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1.2/install.sh | bash -s -- --yes
+curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1/install.sh | bash -s -- --yes
 ```
 
 ## Versioning strategy
 
-This repo uses Git tags to provide stable installer URLs.
+Releases follow [Semantic Versioning](https://semver.org/), worked out from the
+[Conventional Commits](https://www.conventionalcommits.org/) on `main`: `fix:`
+makes a patch release, `feat:` a minor one, and a `!` (such as `feat!:`) or a
+`BREAKING CHANGE:` footer a major one.
 
-Floating tags:
+| Want | Use |
+| --- | --- |
+| The latest release, updated with `git pull` | the `stable` branch |
+| The latest v1.x installer | the `v1` tag |
+| The latest v1.3.x installer | the `v1.3` tag |
+| One exact release, never changing | an exact tag, such as `v1.3.0` |
+| The latest development version | `main` |
 
-- `v1` points to the latest stable `v1.x` release.
-- `v1.1` points to the latest stable `v1.1.x` release.
-
-Exact release tags:
-
-- `v1.1.0`, `v1.1.1`, etc. point to immutable patch releases.
-- Use exact patch tags when you want a fully pinned installer.
-- Use floating tags when you want compatible updates.
+Exact tags never move. `v1` and `v1.3` move to each new matching release, and
+`stable` fast-forwards to every release. When `install.sh` is piped from curl, it
+fetches its other files from its own release, not from `main`.
 
 Examples:
 
+<!-- x-release-please-start-version -->
 ```sh
-# Latest stable v1.x
+# Latest v1.x
 curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1/install.sh | bash
 
-# Latest stable v1.1.x
-curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1.1/install.sh | bash
-
-# Exact immutable v1.1.0
-curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1.1.0/install.sh | bash
-
-# Latest development version
-curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/main/install.sh | bash
+# Exactly v1.2.2
+curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1.2.2/install.sh | bash
 ```
+<!-- x-release-please-end -->
 
-Release process:
+### Releases
 
-1. Commit changes to `main`.
-2. Create an exact patch tag, e.g. `v1.1.1`.
-3. Run `scripts/update-floating-tags.sh --dry-run` to preview floating tag updates.
-4. Run `scripts/update-floating-tags.sh --push` to move and push floating tags like `v1` and `v1.1`.
-5. Create a GitHub release for the new version.
+The [Release workflow](.github/workflows/release.yml) runs
+[release-please](https://github.com/googleapis/release-please) on every push to
+`main`. It keeps a release pull request open, which:
 
-Moving floating tags requires a tag force-push by design; exact patch tags should not be moved after publication.
+- bumps the version in `version.txt`, `install.sh` and this README;
+- adds the release's `feat` and `fix` commits to `CHANGELOG.md`.
+
+To release, merge that pull request (a squash is fine). The workflow then tags
+`vX.Y.Z`, creates a GitHub Release, moves the floating tags with
+`scripts/update-floating-tags.sh`, and fast-forwards `stable`. Until you merge
+it, new commits on `main` just update the pull request.
+
+The workflow needs a token that isn't the workflow's own, because pull requests
+opened with that token don't run CI, so the release pull request's required
+checks would never report. Either:
+
+- **Fine-grained personal access token:** create one for this repository only,
+  with read and write access to Contents, Issues and Pull requests, and save it
+  as the `RELEASE_TOKEN` secret (`gh secret set RELEASE_TOKEN`). Renew it before
+  it expires.
+- **GitHub App:** create an app with the same permissions, install it on this
+  repository only, then add its ID as the `RELEASE_APP_ID` variable and its
+  private key as the `RELEASE_APP_PRIVATE_KEY` secret. It doesn't expire. When
+  the app is configured, the workflow uses it instead of `RELEASE_TOKEN`.
+
+If a release ever needs fixing by hand, `scripts/update-floating-tags.sh --push`
+recomputes the floating tags from the exact ones. Moving floating tags needs a
+tag force-push by design; exact tags should never move once published.
 
 ## Options
 

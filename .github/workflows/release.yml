@@ -1,0 +1,81 @@
+name: Release
+
+# release-please keeps a release pull request open on main, built from Conventional Commits.
+# Merging it tags the release (vX.Y.Z) and creates a GitHub Release; the publish job then
+# moves the floating tags (v1, v1.3) and fast-forwards the stable branch to the release.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: release-please
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      # Pull requests opened with the workflow's own token don't run workflows, so the release
+      # pull request's required checks would never report. A GitHub App (RELEASE_APP_ID and
+      # RELEASE_APP_PRIVATE_KEY) is used when configured; otherwise the RELEASE_TOKEN secret.
+      - name: Get a GitHub App token
+        id: app-token
+        if: ${{ vars.RELEASE_APP_ID != '' }}
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Check for a release token
+        env:
+          TOKEN: ${{ steps.app-token.outputs.token || secrets.RELEASE_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::Add a RELEASE_TOKEN secret, or a GitHub App, so release pull requests run CI. See the README's Releases section."
+            exit 1
+          fi
+
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
+        with:
+          token: ${{ steps.app-token.outputs.token || secrets.RELEASE_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish:
+    name: floating tags and stable
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          # Kept so the steps below can push tags and stable.
+          persist-credentials: true
+
+      - name: Move the floating tags
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          scripts/update-floating-tags.sh --push
+
+      # stable only ever moves forward from one release to the next; a push that isn't a
+      # fast-forward is rejected and fails this step.
+      - name: Fast-forward stable to the release
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          git push origin "$(git rev-parse "$TAG^{commit}"):refs/heads/stable"
+          echo "stable is now at $TAG."
