@@ -4,3 +4,4 @@
 .env
 *.local
 tools/*/test/__pycache__/
+node_modules/

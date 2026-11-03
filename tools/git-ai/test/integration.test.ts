@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { writeFile, readFile, mkdir, rename, unlink, symlink, chmod, readdir, lstat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -367,7 +368,7 @@ console.log(choices[Number(process.env.PICKER_INDEX || '1')]);
   const globalFile = join(directory, 'global-config');
   const log = join(directory, 'picker-log');
   await writeFile(globalFile, '[ai]\nproviders = apple,claude\n[ai "ollama"]\nmodel = test-model\n');
-  const env = { PATH: `${bin}:/usr/bin:/bin`, GIT_CONFIG_GLOBAL: globalFile, PICKER_LOG: log };
+  const env: NodeJS.ProcessEnv = { PATH: `${bin}:/usr/bin:/bin`, GIT_CONFIG_GLOBAL: globalFile, PICKER_LOG: log };
   return { directory, bin, prompts, globalFile, log, env };
 }
 
@@ -485,7 +486,7 @@ const fs = require('node:fs');
 fs.appendFileSync(process.env.FAKE_GUM_LOG, JSON.stringify({args:process.argv.slice(2),tty:process.stdin.isTTY}) + '\\n');
 process.exit(Number(process.env.FAKE_GUM_CODE || '0'));
 `, { mode: 0o700 });
-  const env = { ...codex, PATH: `${bin}:${codex.PATH}`, FAKE_GUM_LOG: gumLog };
+  const env: NodeJS.ProcessEnv = { ...codex, PATH: `${bin}:${codex.PATH}`, FAKE_GUM_LOG: gumLog };
   const tree = git(directory, 'write-tree');
   return { directory, env, gumLog, tree };
 }
@@ -514,6 +515,7 @@ test('automatic context fallback works without a terminal or gum interaction and
   git(directory, 'config', 'ai.commit.contextFallback', 'auto');
   const result = await cli(directory, ['commit', '--dry-run'], env);
   assert.equal(result.code, 0, result.stderr);
+  assert.equal(existsSync(gumLog), false, 'gum was run');
   assert.equal(result.stdout, 'chore: describe staged changes\n');
   assert.match(result.stderr, /automatically trying Codex/);
   assert.ok(!(await readdir(directory)).includes('gum-confirm-log'));

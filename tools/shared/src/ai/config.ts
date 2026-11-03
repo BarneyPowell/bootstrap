@@ -18,8 +18,8 @@ export function invalid(key: string, guidance: string): never {
 }
 
 export type ConfigReader = {
-  read(key: string, boolean?: boolean): Promise<string | undefined>;
-  integer(key: string, fallback: number, min: number, max: number): Promise<number>;
+  read: (key: string, boolean?: boolean) => Promise<string | undefined>;
+  integer: (key: string, fallback: number, min: number, max: number) => Promise<number>;
   origins: Record<string, string>;
 };
 

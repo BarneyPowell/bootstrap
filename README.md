@@ -225,6 +225,24 @@ scripts/update-floating-tags.sh --push
 
 This keeps tags like `v1` and `v1.2` pointed at the latest exact patch tag in their version class. It is intended for local release maintenance, not for end-user installs.
 
+### Checks
+
+```sh
+npm ci       # once, to install the dev tools (installing commands does not need this)
+make lint    # type-check and lint the TypeScript, lint the shell scripts
+make test    # run every test suite
+make ci      # make lint, then make test
+```
+
+- `make lint-ts` type-checks the tools with `tsc` (TypeScript checks only; Node
+  still runs the `.ts` files directly) and lints them with oxlint, including
+  type-aware rules such as unawaited promises. Lint warnings fail the check.
+  Configuration is in `tsconfig.json` and `.oxlintrc.json`.
+- `make lint-shell` runs ShellCheck and checks shell formatting with `shfmt -d`.
+  Both come from the Brewfile; on Debian, `apt install shellcheck shfmt`. Run
+  `shfmt -w` with the same files to apply formatting. `.editorconfig` sets the
+  shfmt style, so editors and shfmt agree.
+
 ## Notes
 
 - `--yes` answers yes to all prompts, including optional tools and login-shell changes. Use `--yes --no-optional --no-chsh` if you want unattended core setup only.

@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "promise", "node", "import"],
+  "categories": { "correctness": "error" },
+  "rules": {
+    // Deliberate: these regexes strip terminal control characters from untrusted text.
+    "no-control-regex": "off",
+    // Deliberate: [...text] counts code points to size terminal output.
+    "typescript/no-misused-spread": "off",
+    // node:test runs and awaits the promises that test() returns.
+    "typescript/no-floating-promises": ["error", {
+      "allowForKnownSafeCalls": [{ "from": "package", "package": "node:test", "name": ["test", "describe", "it"] }]
+    }]
+  },
+  "ignorePatterns": ["node_modules"]
+}

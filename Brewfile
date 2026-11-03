@@ -79,6 +79,10 @@ brew "reattach-to-user-namespace"
 brew "ripgrep"
 # Utility that provides fast incremental file transfer
 brew "rsync"
+# Static analysis and lint tool, to (ba)sh scripts
+brew "shellcheck"
+# Autoformat shell script source code
+brew "shfmt"
 # Cross-shell prompt for astronauts
 brew "starship"
 # Send macOS User Notifications from the command-line
