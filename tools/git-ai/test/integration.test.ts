@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { accessSync, constants, existsSync } from 'node:fs';
 import { writeFile, readFile, mkdir, rename, unlink, symlink, chmod, readdir, lstat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { Git } from '../src/git.ts';
@@ -347,6 +347,21 @@ test('doctor outside repository sends no generation and reports policy; all-prov
   assert.match(failure.stderr, /claude: privacy-blocked/);
 });
 
+// A directory linking only the named system commands, so a PATH built from it
+// cannot pick up whatever else is installed on the machine (such as a real gum).
+async function systemCommands(directory: string, names: string[]): Promise<string> {
+  const bin = join(directory, 'system-bin');
+  await mkdir(bin);
+  for (const name of names) {
+    const found = (process.env.PATH ?? '').split(delimiter).map(dir => join(dir, name)).find(path => {
+      try { accessSync(path, constants.X_OK); return true; } catch { return false; }
+    });
+    if (!found) throw new Error(`Test needs ${name} on PATH.`);
+    await symlink(found, join(bin, name));
+  }
+  return bin;
+}
+
 async function pickerFixture(t: any, models = [{ name: 'test-model' }, { name: 'other-model' }]) {
   const directory = await fixture(t);
   const prompts = await service(t, directory, undefined, models);
@@ -368,7 +383,9 @@ console.log(choices[Number(process.env.PICKER_INDEX || '1')]);
   const globalFile = join(directory, 'global-config');
   const log = join(directory, 'picker-log');
   await writeFile(globalFile, '[ai]\nproviders = apple,claude\n[ai "ollama"]\nmodel = test-model\n');
-  const env: NodeJS.ProcessEnv = { PATH: `${bin}:/usr/bin:/bin`, GIT_CONFIG_GLOBAL: globalFile, PICKER_LOG: log };
+  // The git-ai wrapper needs bash, dirname and readlink; the PTY driver needs python3.
+  const system = await systemCommands(directory, ['bash', 'git', 'python3', 'dirname', 'readlink']);
+  const env: NodeJS.ProcessEnv = { PATH: `${bin}${delimiter}${system}`, GIT_CONFIG_GLOBAL: globalFile, PICKER_LOG: log };
   return { directory, bin, prompts, globalFile, log, env };
 }
 
