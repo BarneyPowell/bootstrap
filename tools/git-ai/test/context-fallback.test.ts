@@ -8,7 +8,7 @@ import { config, fixture, fakeCodex } from './helpers.ts';
 import type { Snapshot } from '../src/git.ts';
 import type { Adapter } from '../src/providers.ts';
 import type { ProviderName } from '../src/config.ts';
-import { checkCodexEvents } from '../src/codex.ts';
+import { checkCodexEvents } from '../../shared/src/ai/codex.ts';
 
 const snapshot: Snapshot = { tree: 't', history: [], changes: [{ status: 'A', paths: ['file'], oldMode: '000000',
   newMode: '100644', oldObject: '0'.repeat(40), newObject: 'a'.repeat(40), patch: '+staged evidence', partial: false }] };

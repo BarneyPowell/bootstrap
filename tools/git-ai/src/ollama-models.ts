@@ -19,7 +19,7 @@ export async function selectOllamaModel(config: Config, scope: 'global' | 'local
       throw new Failure('privacy-blocked', 'A non-loopback Ollama endpoint requires effective Git config ai.allowCloud=true.');
     const deadline = AbortSignal.timeout(config.timeoutSeconds * 1000);
     try {
-      const data = await httpJSON(config.endpoint, '/api/tags', undefined, AbortSignal.any([signal, deadline]));
+      const data = await httpJSON(config.endpoint, '/api/tags', undefined, AbortSignal.any([signal, deadline]), 'git-ai');
       return modelChoices(data).map(choice => choice.model);
     } catch (error) {
       cancelled(signal);

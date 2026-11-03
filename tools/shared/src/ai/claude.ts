@@ -1,11 +1,7 @@
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import type { Config } from './config.ts';
-import type { Adapter } from './providers.ts';
-import { Failure } from '../../shared/src/errors.ts';
-import { run } from '../../shared/src/process.ts';
-import { instructions } from './prompt.ts';
+import type { AiConfig } from './config.ts';
+import type { Adapter, Task } from './providers.ts';
+import { Failure } from '../errors.ts';
+import { run, scratch } from '../process.ts';
 
 const requiredFlags = ['--print', '--output-format', '--include-hook-events', '--no-session-persistence', '--safe-mode',
   '--restricted', '--tools', '--disable-slash-commands', '--strict-mcp-config', '--mcp-config', '--setting-sources',
@@ -23,9 +19,9 @@ export function claudeEnvironment(directory: string): NodeJS.ProcessEnv {
   return env;
 }
 
-function executionFailure(logs: string): Failure {
+function executionFailure(logs: string, tool: string): Failure {
   if (/not logged in|\/login|unauthorized|authentication|invalid.{0,20}(api key|token)|\b401\b|\b403\b|oauth|token.{0,30}expired/i.test(logs))
-    return new Failure('auth-required', 'Claude needs existing Claude Code CLI authentication. Run claude login separately; git-ai does not log in or switch to paid API credentials.');
+    return new Failure('auth-required', `Claude needs existing Claude Code CLI authentication. Run claude login separately; ${tool} does not log in or switch to paid API credentials.`);
   if (/prompt is too long|context.{0,40}(window|length|limit)|too many tokens|maximum context/i.test(logs))
     return new Failure('context-too-large', 'Claude rejected the prepared context as too large.');
   if (/issue with the selected model|model.{0,60}(not found|not exist|not available|not support|invalid)|unknown model|effort/i.test(logs))
@@ -46,7 +42,7 @@ function checkInit(event: any): void {
   if (!emptyList(event.slash_commands)) throw mismatch('slash commands');
   if (!Array.isArray(event.plugins) || event.plugins.some((plugin: any) => plugin?.path !== 'builtin')) throw mismatch('plugins');
   if (event.apiKeySource !== 'none')
-    throw new Failure('unavailable', 'Claude did not authenticate through the CLI login (an API-key or token source was reported). git-ai refuses paid API credential substitution; run claude login separately.');
+    throw new Failure('unavailable', 'Claude did not authenticate through the CLI login (an API-key or token source was reported). Paid API credential substitution is refused; run claude login separately.');
 }
 
 export function checkClaudeEvents(stdout: string): { message?: string; error: string } {
@@ -89,7 +85,7 @@ export function checkClaudeEvents(stdout: string): { message?: string; error: st
   return { message, error };
 }
 
-export function createClaudeAdapter(config: Config): Adapter {
+export function createClaudeAdapter(config: AiConfig, task: Task): Adapter {
   let verified = false;
   const model = config.models.claude;
   function policy() {
@@ -100,34 +96,34 @@ export function createClaudeAdapter(config: Config): Adapter {
     name: 'claude',
     async probe(signal) {
       policy();
-      const directory = await mkdtemp(join(tmpdir(), 'git-ai-claude-probe-'));
-      try {
+      return await scratch(`${task.tool}-claude-probe-`, async directory => {
         const help = await run('claude', ['--help'], { cwd: directory, env: claudeEnvironment(directory), signal });
         if (help.code !== 0 || requiredFlags.some(flag => !help.stdout.includes(flag)))
           throw new Failure('unavailable', 'Installed Claude Code CLI lacks required controls. Update it separately; no prompt was sent.');
         verified = true;
         return { model: model!, locality: 'remote', inputBytes: 65_536,
-          detail: 'Claude controls verified; private cwd, no tools/MCP/skills/plugins, user settings ignored, hooks disabled, session not persisted, session constraints re-checked per run. Managed policy hooks cannot be excluded. Authentication/model entitlement unverified without inference; input cap 64 KiB.' };
-      } finally { await rm(directory, { recursive: true, force: true }); }
+          detail: 'Claude controls verified; private cwd, no tools/MCP/skills/plugins, user settings ignored, hooks disabled, session not persisted, session constraints re-checked per run. Managed policy hooks cannot be excluded. Authentication/model entitlement unverified without inference; input cap 64 KiB.' } as const;
+      });
     },
     async generate(prompt, signal) {
       policy();
       if (!verified) await adapter.probe(signal);
-      const directory = await mkdtemp(join(tmpdir(), 'git-ai-claude-'));
-      try {
+      return await scratch(`${task.tool}-claude-`, async directory => {
         const args = ['--print', '--input-format', 'text', '--output-format', 'stream-json', '--verbose', '--include-hook-events',
           '--no-session-persistence', '--safe-mode', '--restricted', '--tools', '', '--disable-slash-commands',
           '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}', '--setting-sources', '',
           '--settings', '{"disableAllHooks":true}', '--no-chrome', '--permission-prompts', 'none',
-          `--model=${model}`, '--system-prompt', instructions];
+          `--model=${model}`, '--system-prompt', task.instructions];
         if (config.efforts.claude !== undefined) args.push(`--effort=${config.efforts.claude}`);
         const result = await run('claude', args, { cwd: directory, env: claudeEnvironment(directory), signal, input: prompt, timeoutMs: 0 });
         if (result.code === 130) throw new Failure('cancelled', 'Claude cancelled.');
         const events = checkClaudeEvents(result.stdout);
         if (result.code !== 0 || events.error || events.message === undefined)
-          throw executionFailure(result.stderr + events.error);
+          throw executionFailure(result.stderr + events.error, task.tool);
+        if (Buffer.byteLength(events.message) > task.maxOutputBytes)
+          throw new Failure('invalid-output', `Claude's reply exceeds ${task.maxOutputBytes} bytes.`);
         return events.message;
-      } finally { await rm(directory, { recursive: true, force: true }); }
+      });
     },
   };
   return adapter;

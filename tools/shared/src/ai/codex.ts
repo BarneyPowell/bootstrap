@@ -1,11 +1,10 @@
 import { mkdtemp, writeFile, readFile, lstat, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Config } from './config.ts';
-import type { Adapter } from './providers.ts';
-import { Failure } from '../../shared/src/errors.ts';
-import { run } from '../../shared/src/process.ts';
-import { instructions } from './prompt.ts';
+import type { AiConfig } from './config.ts';
+import type { Adapter, Task } from './providers.ts';
+import { Failure } from '../errors.ts';
+import { run } from '../process.ts';
 
 const requiredFeatures = ['shell_tool', 'hooks', 'apps', 'plugins', 'multi_agent', 'memories'];
 const optionalFeatures = ['shell_snapshot', 'browser_use', 'browser_use_external', 'browser_use_full_cdp_access',
@@ -22,9 +21,9 @@ export function codexEnvironment(directory: string): NodeJS.ProcessEnv {
   return env;
 }
 
-function executionFailure(logs: string): Failure {
+function executionFailure(logs: string, tool: string): Failure {
   if (/unauthorized|not logged|log ?in|auth|\b401\b|\b403\b|token.*expired/i.test(logs))
-    return new Failure('auth-required', 'Codex needs existing ChatGPT CLI authentication. Run codex login separately; git-ai does not log in or switch to paid API credentials.');
+    return new Failure('auth-required', `Codex needs existing ChatGPT CLI authentication. Run codex login separately; ${tool} does not log in or switch to paid API credentials.`);
   if (/context.{0,40}(window|length|limit)|too many tokens|maximum context/i.test(logs))
     return new Failure('context-too-large', 'Codex rejected the prepared context as too large.');
   if (/reasoning.{0,50}(unsupported|invalid|not support)|unknown model|model.{0,50}(not found|not exist|not support)|unsupported.{0,20}model/i.test(logs))
@@ -58,7 +57,7 @@ export function checkCodexEvents(stdout: string): { error: string; warnings: str
   return { error, warnings, completed };
 }
 
-export function createCodexAdapter(config: Config): Adapter {
+export function createCodexAdapter(config: AiConfig, task: Task): Adapter {
   let disabled: string[] | undefined;
   const model = config.models.codex;
   function policy() {
@@ -69,7 +68,7 @@ export function createCodexAdapter(config: Config): Adapter {
     name: 'codex',
     async probe(signal) {
       policy();
-      const directory = await mkdtemp(join(tmpdir(), 'git-ai-codex-probe-'));
+      const directory = await mkdtemp(join(tmpdir(), `${task.tool}-codex-probe-`));
       try {
         const env = codexEnvironment(directory);
         const help = await run('codex', ['exec', '--help'], { cwd: directory, env, signal });
@@ -87,12 +86,12 @@ export function createCodexAdapter(config: Config): Adapter {
     async generate(prompt, signal) {
       policy();
       if (!disabled) await adapter.probe(signal);
-      const directory = await mkdtemp(join(tmpdir(), 'git-ai-codex-'));
+      const directory = await mkdtemp(join(tmpdir(), `${task.tool}-codex-`));
       try {
         const messageFile = join(directory, 'message');
         const instructionsFile = join(directory, 'instructions');
         await writeFile(messageFile, '', { mode: 0o600 });
-        await writeFile(instructionsFile, instructions, { mode: 0o600 });
+        await writeFile(instructionsFile, task.instructions, { mode: 0o600 });
         const args = ['exec', '--ignore-user-config', '--ephemeral', '--skip-git-repo-check', '--sandbox', 'read-only',
           '--model', model!, '--color', 'never', '--json', '--output-last-message', messageFile,
           '-c', 'approval_policy="never"', '-c', 'forced_login_method="chatgpt"', '-c', 'model_provider="openai"',
@@ -105,10 +104,10 @@ export function createCodexAdapter(config: Config): Adapter {
         if (result.code === 130) throw new Failure('cancelled', 'Codex cancelled.');
         const events = checkCodexEvents(result.stdout);
         if (result.code !== 0 || events.error || !events.completed)
-          throw executionFailure(result.stderr + events.error + events.warnings);
+          throw executionFailure(result.stderr + events.error + events.warnings, task.tool);
         const info = await lstat(messageFile);
-        if (!info.isFile() || info.isSymbolicLink() || info.size > 8000)
-          throw new Failure('invalid-output', 'Codex final message file is invalid or exceeds 8000 bytes.');
+        if (!info.isFile() || info.isSymbolicLink() || info.size > task.maxOutputBytes)
+          throw new Failure('invalid-output', `Codex final message file is invalid or exceeds ${task.maxOutputBytes} bytes.`);
         return await readFile(messageFile, 'utf8');
       } finally { await rm(directory, { recursive: true, force: true }); }
     },
