@@ -119,7 +119,7 @@ bootstrap clone.
 
 ## Requirements and tests
 
-Node.js **22.18+**, the same as [git-ai](../git-ai/README.md). The process, error
+Node.js **24+**, the same as [git-ai](../git-ai/README.md). The process, error
 and gum helpers come from [`tools/shared`](../shared/README.md). There are no npm
 dependencies.
 

@@ -74,7 +74,7 @@ or when you answer No. 130 on Ctrl+C.
 
 ## Requirements and tests
 
-Node.js **22.18+**, the same as [git-ai](../git-ai/README.md). The process,
+Node.js **24+**, the same as [git-ai](../git-ai/README.md). The process,
 error, Git, gum and spinner helpers come from [`tools/shared`](../shared/README.md).
 There are no npm dependencies.
 

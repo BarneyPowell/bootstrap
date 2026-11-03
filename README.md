@@ -1,5 +1,7 @@
 # bootstrap
 
+[![CI](https://github.com/BarneyPowell/bootstrap/actions/workflows/ci.yml/badge.svg)](https://github.com/BarneyPowell/bootstrap/actions/workflows/ci.yml)
+
 Personal, public-safe machine bootstrap script.
 
 This repo sets up a shell/dev environment without hard-coding a username, hostname, or private values. It is intended for my own machines and accounts, but should be safe to run as any normal user.
@@ -242,6 +244,22 @@ make ci      # make lint, then make test
   Both come from the Brewfile; on Debian, `apt install shellcheck shfmt`. Run
   `shfmt -w` with the same files to apply formatting. `.editorconfig` sets the
   shfmt style, so editors and shfmt agree.
+- `make lint-workflows` runs actionlint on `.github/workflows`. It is not part of
+  `make lint`, because actionlint is not packaged everywhere (`brew install
+  actionlint`, or `go install`).
+
+CI (`.github/workflows/ci.yml`) runs on every pull request and push to `main`, on
+Ubuntu, in three jobs that each run only when their files change:
+
+| Job | Runs | When these change |
+| --- | --- | --- |
+| `typescript` | `make lint-ts`, then every test suite (Node 24) | `tools/`, `scripts/git/`, `scripts/bin/`, npm, TypeScript or oxlint config |
+| `shell` | `make lint-shell` | `install.sh`, `scripts/`, `.editorconfig` |
+| `actionlint` | `make lint-workflows` | `.github/workflows/` |
+
+Markdown files never trigger a job. A change to the `Makefile` runs `typescript`
+and `shell`; a change to `ci.yml`, or a manual run, runs all three. A `changes`
+job decides which jobs run; if it fails, every job runs.
 
 ## Notes
 

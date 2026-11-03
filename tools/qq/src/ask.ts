@@ -22,8 +22,11 @@ export async function ask(prompt: string, config: AiConfig, task: Task, signal: 
   const failures: string[] = [];
   for (const name of config.providers) {
     cancelled(signal);
-    const deadline = AbortSignal.timeout(config.timeoutSeconds * 1000);
-    const providerSignal = AbortSignal.any([signal, deadline]);
+    // A plain timer, unlike AbortSignal.timeout, keeps the event loop alive while a
+    // provider is waiting only for this deadline.
+    const deadline = new AbortController();
+    const timer = setTimeout(() => deadline.abort(), config.timeoutSeconds * 1000);
+    const providerSignal = AbortSignal.any([signal, deadline.signal]);
     try {
       onAttempt(name);
       const adapter = factory(name, config, task);
@@ -39,12 +42,12 @@ export async function ask(prompt: string, config: AiConfig, task: Task, signal: 
       return { text, provider: name, model: capabilities.model, locality: capabilities.locality };
     } catch (error) {
       cancelled(signal);
-      const failure = deadline.aborted
+      const failure = deadline.signal.aborted
         ? new Failure('timeout', `No answer within ${config.timeoutSeconds}s; raise qq.timeoutSeconds to wait longer.`)
         : error instanceof Failure ? error : new Failure('transport/service-error', 'Provider failed; raw diagnostics suppressed.');
       if (failure.kind === 'configuration-invalid' || failure.kind === 'cancelled') throw failure;
       failures.push(`${name}: ${failure.kind}: ${diagnostic(failure.message)}`);
-    }
+    } finally { clearTimeout(timer); }
   }
   throw new NoAnswer(failures);
 }
