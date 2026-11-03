@@ -7,13 +7,11 @@ insert_final_newline = true
 trim_trailing_whitespace = true
 indent_style = space
 indent_size = 2
+# Read only by shfmt, for shell scripts with or without a .sh extension.
+switch_case_indent = true
 
 [Makefile]
 indent_style = tab
 
 [*.md]
 trim_trailing_whitespace = false
-
-# shfmt reads these for shell scripts, including those without a .sh extension.
-[{*.sh,scripts/git/git-*,scripts/bin/*}]
-switch_case_indent = true
