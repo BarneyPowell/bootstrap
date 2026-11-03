@@ -58,7 +58,7 @@ export async function listClaudeModels(config: Config, signal: AbortSignal, repo
   await pickerDependency('claude', signal);
   const directory = await mkdtemp(join(tmpdir(), 'git-ai-claude-models-'));
   try {
-    const env = { ...process.env, PWD: directory, INIT_CWD: directory, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' };
+    const env: NodeJS.ProcessEnv = { ...process.env, PWD: directory, INIT_CWD: directory, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' };
     for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key];
     report('Reading Claude CLI initialization metadata; no user prompt or inference. CLI authentication/metadata checks may contact its services.');
     const result = await run('claude', ['--print', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose',

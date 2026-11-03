@@ -3,7 +3,8 @@
 export type SharedFailureKind = 'not-installed' | 'unavailable' | 'configuration-invalid' | 'timeout' |
   'context-too-large' | 'invalid-output' | 'cancelled' | 'git-error';
 
-export class Failure<Kind extends string = never> extends Error {
+// A plain Failure annotation means a failure of any kind.
+export class Failure<Kind extends string = string> extends Error {
   kind: Kind | SharedFailureKind;
   constructor(kind: Kind | SharedFailureKind, message: string) {
     super(message);

@@ -120,7 +120,7 @@ export function createAdapter(name: ProviderName, config: AiConfig, task: Task):
         context = Math.min(context, config.maxContext.ollama);
         return { model, locality, inputBytes: context - 1024, detail: `Model present; using ${context} tokens of reported context, with conservative byte budgeting; inference not probed.` };
       }
-      throw new Failure('unavailable', `${name} provider is not handled by this adapter.`);
+      throw new Failure('unavailable', `${String(name)} provider is not handled by this adapter.`);
     },
     async generate(prompt, signal) {
       if (name === 'apple') {
@@ -153,7 +153,7 @@ export function createAdapter(name: ProviderName, config: AiConfig, task: Task):
         if (data.model !== undefined && data.model !== model) throw new Failure('configuration-invalid', 'Ollama returned a different model identifier; model substitution is refused.');
         return data.response;
       }
-      throw new Failure('unavailable', `${name} text-only adapter is disabled. No request was sent.`);
+      throw new Failure('unavailable', `${String(name)} text-only adapter is disabled. No request was sent.`);
     },
   };
 }

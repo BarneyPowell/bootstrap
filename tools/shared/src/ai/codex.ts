@@ -14,7 +14,7 @@ const optionalFeatures = ['shell_snapshot', 'browser_use', 'browser_use_external
 // This is a constrained CLI integration, not a claim of a filesystem security
 // boundary. The installed CLI and any managed policy must still be trusted.
 export function codexEnvironment(directory: string): NodeJS.ProcessEnv {
-  const env = { ...process.env, PWD: directory, INIT_CWD: directory };
+  const env: NodeJS.ProcessEnv = { ...process.env, PWD: directory, INIT_CWD: directory };
   for (const key of Object.keys(env)) {
     if (key.startsWith('GIT_') || ['OPENAI_API_KEY', 'CODEX_API_KEY', 'OPENAI_BASE_URL'].includes(key)) delete env[key];
   }

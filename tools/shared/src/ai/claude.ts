@@ -11,7 +11,7 @@ const requiredFlags = ['--print', '--output-format', '--include-hook-events', '-
 // boundary. The installed CLI and any managed (policy) settings must still be
 // trusted: managed hooks are not removable from the command line.
 export function claudeEnvironment(directory: string): NodeJS.ProcessEnv {
-  const env = { ...process.env, PWD: directory, INIT_CWD: directory, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' };
+  const env: NodeJS.ProcessEnv = { ...process.env, PWD: directory, INIT_CWD: directory, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' };
   for (const key of Object.keys(env)) {
     if (key.startsWith('GIT_') || ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_BASE_URL',
       'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY'].includes(key)) delete env[key];

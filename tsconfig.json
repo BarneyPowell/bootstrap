@@ -1,0 +1,17 @@
+{
+  // Type checking only: Node runs the .ts files directly by stripping types.
+  "compilerOptions": {
+    "noEmit": true,
+    "target": "es2024",
+    "lib": ["es2024"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "types": ["node"],
+    "strict": true,
+    "skipLibCheck": true
+  },
+  "include": ["tools/*/src/**/*.ts", "tools/*/test/**/*.ts"]
+}
