@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { Config } from './config.ts';
 import { Failure } from '../../shared/src/errors.ts';
 import { run } from '../../shared/src/process.ts';
-import { codexEnvironment } from './codex.ts';
+import { codexEnvironment } from '../../shared/src/ai/codex.ts';
 import { pickerDependency, selectModel, validModelName } from './model-picker.ts';
 import type { PickerModel } from './model-picker.ts';
 

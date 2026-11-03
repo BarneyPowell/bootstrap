@@ -5,8 +5,11 @@ repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 bin_dir="$HOME/.local/bin"
 zshrc="${ZDOTDIR:-$HOME}/.zshrc"
 
+# Custom Git commands (git-*) and standalone commands, all linked into ~/.local/bin.
+commands=("$repo_dir"/scripts/git/git-* "$repo_dir"/scripts/bin/*)
+
 # Check every destination before making changes. Never replace unrelated files.
-for source in "$repo_dir"/scripts/git/git-*; do
+for source in "${commands[@]}"; do
   [[ -f "$source" ]] || continue
   if [[ ! -x "$source" ]]; then
     printf 'Not executable: %s (run chmod +x on the script first)\n' "$source" >&2
@@ -22,7 +25,7 @@ for source in "$repo_dir"/scripts/git/git-*; do
 done
 
 mkdir -p "$bin_dir"
-for source in "$repo_dir"/scripts/git/git-*; do
+for source in "${commands[@]}"; do
   [[ -f "$source" ]] || continue
   destination="$bin_dir/${source##*/}"
   if [[ ! -L "$destination" ]]; then
@@ -46,6 +49,18 @@ fi
 ZSH
 fi
 
+# zsh treats ? and * in an unquoted question as globs and stops with "no matches
+# found" before qq runs. noglob passes them through as typed.
+qq_alias="alias qq='noglob qq'"
+if ! grep -qxF "$qq_alias" "$zshrc" 2>/dev/null; then
+  cat >> "$zshrc" <<'ZSH'
+
+# qq (bootstrap repository): pass ? and * in questions through unexpanded.
+alias qq='noglob qq'
+ZSH
+  printf 'Added the qq noglob alias to %s\n' "$zshrc"
+fi
+
 # Print a command for the user to run, keeping its variables literal.
 # shellcheck disable=SC2016
-printf 'Git commands installed. If needed, reload your PATH with: export PATH="$HOME/.local/bin:$PATH"\n'
+printf 'Commands installed. If needed, reload your shell with: exec zsh (or export PATH="$HOME/.local/bin:$PATH")\n'

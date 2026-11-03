@@ -6,8 +6,11 @@ from each other. When a helper is needed in a second tool, move it here.
 
 | Module | Contents |
 | ------ | -------- |
-| `src/process.ts` | `run()`: spawn without a shell, with deadlines, cancellation, output limits and terminal modes. `requireCommand()`: check `<cmd> --version` and fail with install guidance. |
+| `src/process.ts` | `run()`: spawn without a shell, with deadlines, cancellation, output limits and terminal modes. `requireCommand()`: check `<cmd> --version` and fail with install guidance. `scratch()`: run code in a private temporary directory that is always removed. |
 | `src/errors.ts` | `Failure` and its shared kinds. A tool adds its own kinds by passing them, for example `new Failure('auth-required', …)`. Also `diagnostic()` (strips control characters) and `cancelled()`. |
+| `src/ai/config.ts` | `loadAiConfig()`: the provider settings `git ai` and `qq` share (`ai.providers`, `ai.allowCloud`, `ai.<provider>.model`, …). A tool can pass a scope such as `qq` so that `qq.providers` and `qq.timeoutSeconds` take precedence. `configReader()` reads Git config and records where each key came from. |
+| `src/ai/providers.ts` | `createAdapter(name, config, task)` for apple, ollama, codex and claude. A `Task` gives the tool name, system instructions and output limits. A `selfContained` prompt (git-ai's) already carries its instructions. Also `httpJSON()`, `isLoopback()` and `executableVersion()`. |
+| `src/ai/claude.ts`, `src/ai/codex.ts` | The constrained Claude Code and Codex CLI integrations: private working directory, no tools, verified session constraints. |
 | `src/gum.ts` | `requireGum()`, `gumText()` and `styleText()`. Also the shared colour palette, `paint()`, and `table()` with its width helpers. |
 | `test/git-env.ts` | Import it first in every test file. It keeps tests away from the real Git config and repository environment. |
 | `test/pty_driver.py` | Gives a command under test a real terminal. |

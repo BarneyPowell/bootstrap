@@ -1,4 +1,7 @@
 import { spawn } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Failure, cancelled } from './errors.ts';
 
 export type RunOptions = {
@@ -64,4 +67,11 @@ export async function requireCommand(executable: string, guidance: string, signa
     if (!(error instanceof Failure)) throw error;
   }
   throw new Failure('not-installed', guidance);
+}
+
+// Run body in a fresh private temporary directory that is always removed afterwards.
+export async function scratch<T>(prefix: string, body: (directory: string) => Promise<T>): Promise<T> {
+  const directory = await mkdtemp(join(tmpdir(), prefix));
+  try { return await body(directory); }
+  finally { await rm(directory, { recursive: true, force: true }); }
 }

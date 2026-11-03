@@ -29,7 +29,7 @@ async function inspect(name: ProviderName, config: Config, signal: AbortSignal):
     model: config.models[name] ?? (name === 'apple' ? 'system' : '(not configured)'),
     effort: config.efforts[name] ?? '(not set)' };
   if (name === 'codex' || name === 'claude') {
-    try { entry.version = await executableVersion(name, signal); }
+    try { entry.version = await executableVersion(name, signal, 'git-ai'); }
     catch { entry.version = null; }
   }
   const timeout = AbortSignal.timeout(Math.min(config.timeoutSeconds * 1000, 3000));
