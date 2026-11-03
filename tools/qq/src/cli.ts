@@ -2,10 +2,11 @@ import { fstatSync } from 'node:fs';
 import { parseArgs, help, version } from './args.ts';
 import { ask, NoAnswer } from './ask.ts';
 import { buildPrompt, detectEnvironment, maxContextBytes, qqTask } from './prompt.ts';
-import { Spinner, colour, readQuestion, renderAnswer } from './ui.ts';
+import { readQuestion, renderAnswer } from './ui.ts';
 import { configReader, loadAiConfig } from '../../shared/src/ai/config.ts';
 import { Failure, diagnostic } from '../../shared/src/errors.ts';
 import { paint, palette } from '../../shared/src/gum.ts';
+import { Spinner, colour } from '../../shared/src/terminal.ts';
 
 const controller = new AbortController();
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => controller.abort(signal));

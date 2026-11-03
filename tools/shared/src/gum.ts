@@ -1,5 +1,5 @@
 import { requireCommand, run } from './process.ts';
-import { Failure } from './errors.ts';
+import { Failure, cancelled } from './errors.ts';
 
 export const palette = { accent: '141', ok: '78', warn: '214', bad: '203', dim: '245', text: '252', rule: '240' };
 
@@ -12,6 +12,19 @@ export async function gumText(args: string[], signal: AbortSignal, input?: strin
   const result = await run('gum', args, { signal, input, env: { ...process.env, CLICOLOR_FORCE: '1' }, timeoutMs: 5000 });
   if (result.code !== 0) throw new Failure('unavailable', 'gum rendering failed.');
   return result.stdout.replace(/\n$/, '');
+}
+
+// Ask a yes/no question on the terminal. No and Esc both answer 'no'; Ctrl+C is 'cancel'.
+// A safe default starts the prompt on the negative answer.
+export type ConfirmOptions = { affirmative: string; negative: string; safeDefault: boolean };
+export async function confirm(prompt: string, options: ConfirmOptions, signal: AbortSignal): Promise<'yes' | 'no' | 'cancel'> {
+  const result = await run('gum', ['confirm', `--affirmative=${options.affirmative}`, `--negative=${options.negative}`,
+    `--default=${options.safeDefault ? 'false' : 'true'}`, '--timeout=0s', '--', prompt], { signal, interactive: true, timeoutMs: 0, limit: 4096 });
+  cancelled(signal);
+  if (result.code === 0) return 'yes';
+  if (result.code === 1) return 'no';
+  if (result.code === 130) return 'cancel';
+  throw new Failure('unavailable', 'gum confirm failed. Check your gum installation.');
 }
 
 // Text is passed after `--` as a plain argument: never a template, never a flag.
