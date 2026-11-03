@@ -50,14 +50,15 @@ skip it for this run, or skip it and stop asking. The last choice is saved in
 enable the prompt again. Unattended runs skip the prompt without saving a choice.
 You can also run this check separately with `make ensure-gum`.
 
-`make install` symlinks executable `scripts/git/git-*` files into `~/.local/bin`
-and ensures zsh adds that directory to `PATH`. In an existing terminal that does
+`make install` symlinks executable `scripts/git/git-*` and `scripts/bin/*` files
+into `~/.local/bin` and ensures zsh adds that directory to `PATH`. In an existing terminal that does
 not already include it, run `export PATH="$HOME/.local/bin:$PATH"` first, or open
 a new terminal.
 
 Git discovers these commands automatically: `scripts/git/git-hello` becomes
 `git hello`. Add another executable script with the `git-` prefix and rerun
-`make install` (or `make install-git`). Edits to linked scripts take effect
+`make install` (or `make install-commands`). Standalone commands such as `qq`
+live in `scripts/bin/`. Edits to linked scripts take effect
 immediately. Keep the clone in place so the symlinks continue to work.
 
 Repeated installs leave correct links alone. Conflicting files are reported
@@ -87,6 +88,21 @@ days (set this with `git config tidy.staleAfter`). It offers to delete them, but
 none start selected. Run `git tidy --dry-run` to list the branches without
 changing anything. See the [git-tidy guide](tools/git-tidy/README.md) for the safety
 rules.
+
+### Quick questions
+
+`qq` asks an AI provider one question and prints the answer, formatted with gum:
+
+```sh
+qq How do I see all the members of a group in linux?
+qq                                  # type the question at a prompt
+make 2>&1 | qq why did this fail    # piped text becomes context
+```
+
+It uses the same providers and Git settings as `git ai`. `qq.providers`
+optionally sets its own order. `make install` also adds `alias qq='noglob qq'` to
+`~/.zshrc`, so zsh does not treat `?` and `*` in a question as filename patterns.
+See the [qq guide](tools/qq/README.md) for setup and for what is sent.
 
 ### Legacy installer usage
 
