@@ -866,3 +866,34 @@ test('review: ctrl-c in the provider menu cancels without committing', async t =
   assert.match(result.stdout, /nothing was committed/);
   assert.throws(() => git(directory, 'rev-parse', '--verify', 'HEAD'));
 });
+
+for (const interactive of [false, true]) {
+  test(`--yolo commits the proposal without review or editor (${interactive ? 'terminal' : 'no terminal'})`, async t => {
+    const directory = await fixture(t);
+    await stage(directory);
+    const prompts = await service(t, directory);
+    const result = await cli(directory, ['commit', '--yolo'], { ...await reviewGum(directory), REVIEW_CHOICE: 'reject',
+      GIT_EDITOR: await editor(directory), TEST_EDITOR_ACTION: 'fail' }, interactive);
+    assert.equal(result.code, 0, result.stdout + result.stderr);
+    assert.equal(git(directory, 'log', '-1', '--format=%s'), message);
+    assert.equal(prompts.length, 1);
+    const output = interactive ? result.stdout : result.stderr;
+    assert.match(output, /Proposed commit message/);
+    assert.ok(output.includes(message));
+    // gum may style the card, but it is never asked to choose.
+    const log = await readFile(join(directory, 'review-log'), 'utf8').catch(() => '');
+    assert.ok(!log.includes('"command":"choose"'), log);
+  });
+}
+
+test('--yolo reports a failed commit hook and commits nothing', async t => {
+  const directory = await fixture(t);
+  await stage(directory);
+  await service(t, directory);
+  await mkdir(join(directory, 'hooks'));
+  await writeFile(join(directory, 'hooks/pre-commit'), '#!/bin/sh\nexit 23\n', { mode: 0o700 });
+  const result = await cli(directory, ['commit', '--yolo'], await reviewGum(directory));
+  assert.equal(result.code, 1, result.stdout + result.stderr);
+  assert.throws(() => git(directory, 'rev-parse', '--verify', 'HEAD'));
+  assert.match(result.stderr, /Git exited 1/);
+});

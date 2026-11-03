@@ -5,7 +5,7 @@ import type { Overrides, ProviderName } from './config.ts';
 export const help = `git-ai 1.0.0 — staged Conventional Commits assistance
 
 Usage:
-  git ai commit [--dry-run] [--provider apple|ollama|codex|claude]
+  git ai commit [--dry-run|--yolo] [--provider apple|ollama|codex|claude]
                 [--model <id>] [--reasoning-effort <level>]
   git ai doctor [--plain]
   git ai ollama models [--global|--local]
@@ -15,7 +15,8 @@ Usage:
   git ai --version
 
 --model and --reasoning-effort require --provider. Provider pinning disables
-fallback. No Git commit flags or pathspecs are accepted. Cloud inference is
+fallback. --yolo commits the proposal without review and needs no terminal.
+No Git commit flags or pathspecs are accepted. Cloud inference is
 disabled unless effective Git config ai.allowCloud is true.
 ollama models uses gum to save only ai.ollama.model (global by default).
 codex models uses gum to save only ai.codex.model (global by default).
@@ -48,6 +49,7 @@ export function parseArgs(args: string[]): { command: 'help' | 'version' | 'doct
     if (seen.has(flag)) throw new Failure('configuration-invalid', `Repeated option: ${flag}.`);
     seen.add(flag);
     if (flag === '--dry-run') { options.dryRun = true; continue; }
+    if (flag === '--yolo') { options.yolo = true; continue; }
     if (!['--provider', '--model', '--reasoning-effort'].includes(flag)) throw new Failure('configuration-invalid', `Unsupported option or pathspec: ${flag}. Run git ai --help.`);
     const value = args[++i];
     if (value === undefined || value.startsWith('--')) throw new Failure('configuration-invalid', `Missing value for ${flag}.`);
@@ -57,6 +59,7 @@ export function parseArgs(args: string[]): { command: 'help' | 'version' | 'doct
     } else if (flag === '--model') options.model = value;
     else options.reasoningEffort = value;
   }
+  if (options.dryRun && options.yolo) throw new Failure('configuration-invalid', '--dry-run and --yolo cannot be combined.');
   if ((options.model !== undefined || options.reasoningEffort !== undefined) && !options.provider)
     throw new Failure('configuration-invalid', '--model and --reasoning-effort require --provider.');
   return { command: 'commit', options };

@@ -32,7 +32,10 @@ test('CLI accepts scoped options and rejects all unsupported Git flags and paths
     { provider: 'codex', model: 'id', reasoningEffort: 'low', dryRun: true });
   for (const option of ['--no-edit', '-a', '--all', '--amend', '--fixup', '--squash', '--interactive', '--no-verify', '-m', '--message', 'pathspec', '--unknown'])
     assert.throws(() => parseArgs(['commit', option]));
-  for (const args of [['other'], ['commit', '--model', 'x'], ['commit', '--reasoning-effort', 'low'], ['commit', '--provider', 'invalid'], ['commit', '--dry-run', '--dry-run'], ['doctor', '--provider', 'apple']])
+  assert.deepEqual(parseArgs(['commit', '--yolo', '--provider', 'ollama']).options, { yolo: true, provider: 'ollama' });
+  assert.throws(() => parseArgs(['commit', '--yolo', '--dry-run']), /cannot be combined/);
+  assert.throws(() => parseArgs(['doctor', '--yolo']));
+  for (const args of [['other'], ['commit', '--model', 'x'], ['commit', '--reasoning-effort', 'low'], ['commit', '--provider', 'invalid'], ['commit', '--dry-run', '--dry-run'], ['commit', '--yolo', '--yolo'], ['doctor', '--provider', 'apple']])
     assert.throws(() => parseArgs(args));
 });
 

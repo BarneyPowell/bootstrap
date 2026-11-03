@@ -3,7 +3,7 @@ import type { AiConfig, AiOverrides, ProviderName } from '../../shared/src/ai/co
 
 export { providers };
 export type { ProviderName };
-export type Overrides = AiOverrides & { dryRun?: boolean; plain?: boolean };
+export type Overrides = AiOverrides & { dryRun?: boolean; yolo?: boolean; plain?: boolean };
 export type Config = AiConfig & {
   contextFallback: 'ask' | 'auto' | 'never';
   recentCount: number; subjectMaxLength: number;
