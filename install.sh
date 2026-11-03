@@ -4,8 +4,9 @@ set -euo pipefail
 # Personal bootstrap script.
 # Public-safe: no hard-coded usernames, hostnames, secrets, or private paths.
 
-BOOTSTRAP_REPO_RAW="https://raw.githubusercontent.com/BarneyPowell/bootstrap/main"
-BOOTSTRAP_VERSION="v1.2.0"
+BOOTSTRAP_VERSION="v1.2.2" # x-release-please-version
+# When install.sh is piped from curl, the files it fetches come from the same release.
+BOOTSTRAP_REPO_RAW="https://raw.githubusercontent.com/BarneyPowell/bootstrap/${BOOTSTRAP_VERSION}"
 if [[ -n "${BASH_SOURCE[0]-}" && -f "${BASH_SOURCE[0]}" ]]; then
   SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
 else
