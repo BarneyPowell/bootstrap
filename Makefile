@@ -1,4 +1,4 @@
-.PHONY: help install install-commands install-git-aliases install-git ensure-gum test test-shared test-git-ai test-git-tidy test-git-wt test-qq check lint lint-ts lint-shell ci
+.PHONY: help install install-commands install-git-aliases install-git ensure-gum test test-shared test-git-ai test-git-tidy test-git-wt test-qq check lint lint-ts lint-shell lint-workflows ci
 
 SHELL_SCRIPTS := install.sh $(wildcard scripts/*.sh scripts/git/git-* scripts/bin/*)
 BIN := node_modules/.bin
@@ -12,6 +12,7 @@ help:
 	@echo 'make lint-ts      type-check with tsc and lint with oxlint'
 	@echo 'make lint-shell   run ShellCheck and shfmt (check only) on shell scripts'
 	@echo 'make check        same as make lint-shell'
+	@echo 'make lint-workflows  run actionlint on the GitHub Actions workflows'
 	@echo 'make ci           run make lint, then make test'
 	@echo 'make test-shared   run tests for helpers shared by the tools'
 	@echo 'make test-git-ai   run isolated git-ai tests (no live inference)'
@@ -45,6 +46,11 @@ lint-shell:
 	@command -v shellcheck >/dev/null && command -v shfmt >/dev/null || { echo 'Install shellcheck and shfmt (brew bundle, or apt install shellcheck shfmt).' >&2; exit 1; }
 	@shellcheck $(SHELL_SCRIPTS)
 	@shfmt -d $(SHELL_SCRIPTS)
+
+# Not part of make lint: actionlint is not packaged for every platform. CI runs it separately.
+lint-workflows:
+	@command -v actionlint >/dev/null || { echo 'Install actionlint (brew install actionlint, or go install github.com/rhysd/actionlint/cmd/actionlint@latest).' >&2; exit 1; }
+	@actionlint
 
 # Former name for the shell checks.
 check: lint-shell

@@ -1,5 +1,7 @@
 # bootstrap
 
+[![CI](https://github.com/BarneyPowell/bootstrap/actions/workflows/ci.yml/badge.svg)](https://github.com/BarneyPowell/bootstrap/actions/workflows/ci.yml)
+
 Personal, public-safe machine bootstrap script.
 
 This repo sets up a shell/dev environment without hard-coding a username, hostname, or private values. It is intended for my own machines and accounts, but should be safe to run as any normal user.
@@ -242,6 +244,13 @@ make ci      # make lint, then make test
   Both come from the Brewfile; on Debian, `apt install shellcheck shfmt`. Run
   `shfmt -w` with the same files to apply formatting. `.editorconfig` sets the
   shfmt style, so editors and shfmt agree.
+- `make lint-workflows` runs actionlint on `.github/workflows`. It is not part of
+  `make lint`, because actionlint is not packaged everywhere (`brew install
+  actionlint`, or `go install`).
+
+CI (`.github/workflows/ci.yml`) runs `make ci` on every pull request and push to
+`main`: on Ubuntu with Node 22 (the oldest supported) and the current LTS, and on
+macOS with the current LTS. A separate job runs actionlint.
 
 ## Notes
 
