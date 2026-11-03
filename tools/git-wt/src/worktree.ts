@@ -108,12 +108,6 @@ export async function hasOwnCommits(repo: Repo, branch: string): Promise<boolean
   return cherry.split('\n').some(line => line.startsWith('+'));
 }
 
-export async function defaultBranch(repo: Repo): Promise<string> {
-  const result = await repo.capture(['symbolic-ref', '--short', `refs/remotes/${remote}/HEAD`]);
-  const name = result.code === 0 ? result.stdout.trim().replace(new RegExp(`^${remote}/`), '') : '';
-  return name || 'main';
-}
-
 export const isDirty = async (repo: Repo, path: string) =>
   (await new Repo(path, repo.signal).text(['status', '--porcelain'], 'checking for local changes')) !== '';
 

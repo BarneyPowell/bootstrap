@@ -4,7 +4,6 @@ import {
   addExisting,
   addNew,
   addTracking,
-  defaultBranch,
   ensureFetchRefspec,
   fastForward,
   fetchAll,
@@ -21,7 +20,7 @@ import {
   worktreeFor,
   worktreeRoot,
 } from './worktree.ts';
-import { Repo } from '../../shared/src/git.ts';
+import { Repo, defaultBranch } from '../../shared/src/git.ts';
 import { confirm, paint, palette, requireGum } from '../../shared/src/gum.ts';
 import { Spinner, colour } from '../../shared/src/terminal.ts';
 import { Failure, diagnostic } from '../../shared/src/errors.ts';
@@ -104,7 +103,7 @@ async function main(): Promise<number> {
     const answer = await ask(`${branch} isn't on ${remote}. Create it as a new branch?`, 'Create branch', signal);
     if (answer !== 'yes') return declined(answer);
     await spin(`Fetching ${remote}…`, () => fetchAll(repo));
-    const base = await defaultBranch(repo);
+    const base = await defaultBranch(repo, remote);
     const baseWorktree = await worktreeFor(repo, base);
     if (baseWorktree && (await isDirty(repo, baseWorktree)))
       warn(`${baseWorktree} has local changes; not updating it.`);
