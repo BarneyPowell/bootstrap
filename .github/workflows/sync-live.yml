@@ -1,0 +1,50 @@
+name: Sync live
+
+# After main changes, fast-forward live to it. live PRs merge with a merge commit, so main
+# then contains all of live and this is a plain fast-forward: no merge commit, no conflicts.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Runs queue rather than cancel, so the newest main always ends up on live.
+concurrency:
+  group: sync-live
+  cancel-in-progress: false
+
+jobs:
+  fast-forward:
+    name: fast-forward live
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          # Kept so the step below can push live. Only a fast-forward is pushed.
+          persist-credentials: true
+
+      - name: Fast-forward live to main
+        run: |
+          git fetch --quiet origin main live
+          main=$(git rev-parse origin/main)
+          if [ "$(git rev-parse origin/live)" = "$main" ]; then
+            echo "live is already at main."
+          elif ! git merge-base --is-ancestor origin/live origin/main; then
+            echo "::notice::live has commits that aren't on main yet, so it can't fast-forward. They go to main with the next git live pull request."
+          elif git push origin "$main:refs/heads/live"; then
+            echo "Fast-forwarded live to main ($(git rev-parse --short "$main"))."
+          else
+            # live may have gained a commit since the fetch; that is not a failure.
+            git fetch --quiet origin live
+            if git merge-base --is-ancestor origin/live "$main"; then
+              echo "::error::Pushing live failed."
+              exit 1
+            fi
+            echo "::notice::live gained new commits while syncing; leaving it for the next git live pull request."
+          fi

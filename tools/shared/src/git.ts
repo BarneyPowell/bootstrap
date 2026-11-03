@@ -23,3 +23,10 @@ export class Repo {
     return result.stdout.replace(/\n$/, '');
   }
 }
+
+// The remote's default branch, from refs/remotes/<remote>/HEAD (set by clone); main if unknown.
+export async function defaultBranch(repo: Repo, remote: string): Promise<string> {
+  const result = await repo.capture(['symbolic-ref', '--short', `refs/remotes/${remote}/HEAD`]);
+  const name = result.code === 0 ? result.stdout.trim().replace(new RegExp(`^${remote}/`), '') : '';
+  return name || 'main';
+}
