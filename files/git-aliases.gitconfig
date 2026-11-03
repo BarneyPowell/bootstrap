@@ -5,4 +5,4 @@
 	rebase-main = !git fetch origin && git rebase --autostash refs/remotes/origin/main
 	la = !git config --list | grep ^alias\\. | cut -c 7- | grep -Ei --color \"$1\" "#" # List aliases
 	ll = log --oneline --graph --decorate --all
-	yolo = "!git add -A && git ai commit --provider claude --yolo && git push"
+	yolo = "!git add -A && git ai commit --provider claude --model claude-haiku-5-5 --yolo && git push"
