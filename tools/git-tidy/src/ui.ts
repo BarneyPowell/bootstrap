@@ -1,6 +1,6 @@
 import { run } from '../../shared/src/process.ts';
 import { Failure, cancelled } from '../../shared/src/errors.ts';
-import { palette, paint, styleText as style, table } from '../../shared/src/gum.ts';
+import { confirm as ask, palette, paint, styleText as style, table } from '../../shared/src/gum.ts';
 import type { Candidate, Kept, Scan, Stale } from './branches.ts';
 import type { Outcome } from './delete.ts';
 
@@ -79,13 +79,12 @@ export async function choose(header: string, options: [label: string, value: str
 }
 
 export async function confirm(prompt: string, affirmative: string, safeDefault: boolean, signal: AbortSignal): Promise<'yes' | 'no' | 'cancel'> {
-  const result = await run('gum', ['confirm', `--affirmative=${affirmative}`, '--negative=Keep', `--default=${safeDefault ? 'false' : 'true'}`,
-    '--timeout=0s', '--', prompt], { signal, interactive: true, timeoutMs: 0, limit: 4096 });
-  cancelled(signal);
-  if (result.code === 0) return 'yes';
-  if (result.code === 1) return 'no';
-  if (result.code === 130) return 'cancel';
-  throw new Failure('unavailable', 'gum confirm failed; nothing more was deleted. Check your gum installation.');
+  try { return await ask(prompt, { affirmative, negative: 'Keep', safeDefault }, signal); }
+  catch (error) {
+    if (error instanceof Failure && error.kind === 'unavailable')
+      throw new Failure('unavailable', 'gum confirm failed; nothing more was deleted. Check your gum installation.');
+    throw error;
+  }
 }
 
 export function branchLabels(candidates: Candidate[]): [string, string][] {

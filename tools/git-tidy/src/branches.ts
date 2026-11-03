@@ -1,6 +1,5 @@
-import { run } from '../../shared/src/process.ts';
-import type { RunOptions, Result } from '../../shared/src/process.ts';
 import { Failure, cancelled, diagnostic } from '../../shared/src/errors.ts';
+import { Repo as GitRepo } from '../../shared/src/git.ts';
 
 export type Kind = 'merged' | 'gone';
 export type Candidate = {
@@ -22,18 +21,7 @@ export type Scan = { remote: string; main: Main; candidates: Candidate[]; stale:
 // Long-lived branch names that are never offered, locally or on the remote.
 export const protectedNames = new Set(['main', 'master', 'develop']);
 
-export class Repo {
-  cwd: string;
-  signal?: AbortSignal;
-  constructor(cwd = process.cwd(), signal?: AbortSignal) { this.cwd = cwd; this.signal = signal; }
-  async capture(args: string[], options: RunOptions = {}): Promise<Result> {
-    return await run('git', ['--no-pager', '-c', 'color.ui=false', ...args], { cwd: this.cwd, signal: this.signal, ...options });
-  }
-  async text(args: string[], action: string): Promise<string> {
-    const result = await this.capture(args);
-    if (result.code !== 0) throw new Failure('git-error', `Git ${args[0]} failed while ${action}.`);
-    return result.stdout.replace(/\n$/, '');
-  }
+export class Repo extends GitRepo {
   async validate(): Promise<void> {
     if ((await this.capture(['rev-parse', '--is-inside-work-tree'])).stdout.trim() !== 'true')
       throw new Failure('git-error', 'Run git tidy inside a non-bare working-tree repository.');
