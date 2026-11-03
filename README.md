@@ -80,7 +80,8 @@ is named `main`.
 ### AI-assisted commit messages
 
 `make install` also exposes `git ai commit`: it proposes a Conventional Commits
-message for staged changes and opens Git's editor for review. See the
+message for staged changes and opens Git's editor for review.
+Add `--yolo` to commit the proposal without reviewing it. See the
 [git-ai guide](tools/git-ai/README.md) for runtime/build requirements, providers,
 configuration, privacy, tests, and editor acceptance/abort behaviour.
 Use `git ai ollama models` for a gum picker that saves your global default

@@ -22,6 +22,12 @@ Either way Git's hooks, signing and cleanup run as for any commit. If gum is
 missing or its prompt fails, git-ai says so and falls back to the editor, where
 you can still abort. Nothing is regenerated after a rejection.
 
+`git ai commit --yolo` skips the review. It prints the proposal, then commits it
+exactly as the provider wrote it, without gum or an editor. It does not need a
+terminal, so it works in scripts. Git's hooks, signing and cleanup still run,
+and a failing hook still stops the commit. `--yolo` cannot be combined with
+`--dry-run`.
+
 ## Build and install
 
 Requires Bash, Git (2.31+ for path resolution), and Node.js **22.18+** with native
@@ -71,6 +77,7 @@ git ai claude models
 git ai claude models --local
 git ai commit
 git ai commit --dry-run
+git ai commit --yolo
 git ai commit --provider apple
 git ai commit --provider ollama --model '<installed-local-model-id>'
 git ai commit --provider codex --model '<supported-lightweight-model-id>' --reasoning-effort low

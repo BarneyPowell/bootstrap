@@ -6,7 +6,7 @@ import { generateProposal } from './fallback.ts';
 import { commit } from './commit.ts';
 import { collectDoctor, plainLines, renderDoctor } from './doctor.ts';
 import { pickerDependency } from './model-picker.ts';
-import { reviewMessage, chooseProvider } from './review.ts';
+import { reviewMessage, chooseProvider, showProposal } from './review.ts';
 import { Failure, cancelled, diagnostic } from '../../shared/src/errors.ts';
 import { selectOllamaModel } from './ollama-models.ts';
 import { selectCodexModel } from './codex-models.ts';
@@ -22,7 +22,7 @@ async function main(): Promise<number> {
     process.stdout.write(command === 'help' ? help : 'git-ai 1.0.0\n');
     return 0;
   }
-  if (command === 'commit' && !options.dryRun && (!process.stdin.isTTY || !process.stdout.isTTY))
+  if (command === 'commit' && !options.dryRun && !options.yolo && (!process.stdin.isTTY || !process.stdout.isTTY))
     throw new Failure('unavailable', 'Commit review requires an interactive terminal. Use --dry-run for generation without an editor.');
   const config = await loadConfig(options, undefined, controller.signal);
   if (command === 'ollama-models') return await selectOllamaModel(config, scope ?? 'global', controller.signal, report);
@@ -55,6 +55,11 @@ async function main(): Promise<number> {
   };
   let proposal = await propose(config);
   if (options.dryRun) { process.stdout.write(proposal.message + '\n'); return 0; }
+  if (options.yolo) {
+    // No review: show what is being committed, then commit it exactly as proposed.
+    await showProposal(proposal, controller.signal);
+    return await commitProposal(git, snapshot.tree, proposal.message, false);
+  }
   let decision = await reviewMessage(proposal, controller.signal, report);
   while (decision === 'retry') {
     const provider = await chooseProvider(config, proposal.provider, controller.signal, report);
@@ -73,7 +78,11 @@ async function main(): Promise<number> {
     report(decision === 'reject' ? 'Proposal rejected; nothing was committed.' : 'Cancelled; nothing was committed.');
     return decision === 'reject' ? 1 : 130;
   }
-  const code = await commit(git, snapshot.tree, proposal.message, decision === 'edit');
+  return await commitProposal(git, snapshot.tree, proposal.message, decision === 'edit');
+}
+
+async function commitProposal(git: Git, tree: string, message: string, edit: boolean): Promise<number> {
+  const code = await commit(git, tree, message, edit);
   if (code !== 0) {
     try {
       const path = await git.text(['rev-parse', '--path-format=absolute', '--git-path', 'COMMIT_EDITMSG']);

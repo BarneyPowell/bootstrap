@@ -54,6 +54,17 @@ export async function renderCard(proposal: Proposal, columns: number, signal: Ab
     await styleText(signal, lines.join('\n'), '--border=rounded', '--border-foreground=141', '--padding=0 1')].join('\n');
 }
 
+// Print the proposal card on stderr, or plain text when gum cannot style it.
+export async function showProposal(proposal: Proposal, signal: AbortSignal): Promise<void> {
+  let card: string;
+  try { card = await renderCard(proposal, process.stderr.columns || 80, signal); }
+  catch {
+    cancelled(signal);
+    card = `Proposed commit message (${proposal.provider} · ${diagnostic(proposal.model)}):\n\n${proposal.message}\n`;
+  }
+  process.stderr.write(card + '\n');
+}
+
 // Show the validated proposal and ask what to do with it. Anything that stops gum
 // from asking falls back to the editor, where the user can still abort.
 export async function reviewMessage(proposal: Proposal, signal: AbortSignal, report: (line: string) => void): Promise<Decision> {
@@ -63,13 +74,7 @@ export async function reviewMessage(proposal: Proposal, signal: AbortSignal, rep
     report('gum is unavailable, so the proposal opens in your editor. Run make ensure-gum for the accept/edit/reject prompt.');
     return 'edit';
   }
-  let card: string;
-  try { card = await renderCard(proposal, process.stderr.columns || 80, signal); }
-  catch {
-    cancelled(signal);
-    card = `Proposed commit message (${proposal.provider} · ${diagnostic(proposal.model)}):\n\n${proposal.message}\n`;
-  }
-  process.stderr.write(card + '\n');
+  await showProposal(proposal, signal);
   const { code, picked } = await choose('Commit with this message?', choices.map(([, label]) => label), signal);
   if (code === 130) return 'cancel';
   // Esc leaves the prompt without a choice: treat it as a rejection.
