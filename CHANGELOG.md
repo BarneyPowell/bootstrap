@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.3.0](https://github.com/BarneyPowell/bootstrap/compare/v1.2.2...v1.3.0) (2026-11-03)
+## [1.3.0](https://github.com/BarneyPowell/bootstrap/compare/v1.2.2...v1.3.0) (2026-11-04)
 
 
 ### Features
