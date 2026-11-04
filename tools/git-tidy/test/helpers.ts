@@ -97,7 +97,7 @@ export async function fixture(t: { after: (fn: () => Promise<void>) => void }): 
 //   choose: all | none | esc | ctrl-c | broken | pick:<value>+<value>
 //   confirm: yes | no | ctrl-c
 //   missing (gum --version fails)
-// style and table echo their text so assertions can read the rendered output.
+// style and table echo their text (table's from --file) so assertions can read the rendered output.
 export async function fakeGum(root: string): Promise<{ env: NodeJS.ProcessEnv; log: string }> {
   const bin = join(root, 'gum-bin');
   await mkdir(bin, { recursive: true });
@@ -111,7 +111,13 @@ const args = process.argv.slice(2);
 const script = (process.env.TIDY_GUM || 'all,yes').split(',');
 if (args.includes('--version')) process.exit(script[0] === 'missing' ? 1 : 0);
 if (args[0] === 'style') { console.log(args.at(-1)); process.exit(0); }
-if (args[0] === 'table') { process.stdin.pipe(process.stdout); return; }
+if (args[0] === 'table') {
+  // Like real gum when stdin is a socket: rows only come from --file.
+  const file = args.find(arg => arg.startsWith('--file='));
+  if (!file) { console.log('no data provided'); process.exit(1); }
+  process.stdout.write(fs.readFileSync(file.slice('--file='.length), 'utf8'));
+  return;
+}
 const index = fs.existsSync(${JSON.stringify(step)}) ? Number(fs.readFileSync(${JSON.stringify(step)}, 'utf8')) : 0;
 fs.writeFileSync(${JSON.stringify(step)}, String(index + 1));
 const options = args.slice(args.indexOf('--') + 1);

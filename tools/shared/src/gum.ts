@@ -1,5 +1,7 @@
-import { requireCommand, run } from './process.ts';
-import { Failure, cancelled } from './errors.ts';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { requireCommand, run, scratch } from './process.ts';
+import { Failure, cancelled, diagnostic } from './errors.ts';
 
 export const palette = { accent: '141', ok: '78', warn: '214', bad: '203', dim: '245', text: '252', rule: '240' };
 
@@ -8,14 +10,18 @@ export const requireGum = (signal: AbortSignal) =>
 
 // Run gum for its rendered text. gum drops colour when its output is a pipe, so
 // colour is forced; callers write the captured text to the terminal themselves.
-export async function gumText(args: string[], signal: AbortSignal, input?: string): Promise<string> {
+// gum gets no stdin: Node hands a child a socket, which gum takes for no input at all.
+export async function gumText(args: string[], signal: AbortSignal): Promise<string> {
   const result = await run('gum', args, {
     signal,
-    input,
     env: { ...process.env, CLICOLOR_FORCE: '1' },
     timeoutMs: 5000,
   });
-  if (result.code !== 0) throw new Failure('unavailable', 'gum rendering failed.');
+  if (result.code !== 0) {
+    // gum prints some errors (such as "no data provided") on stdout, so look at both.
+    const reason = (result.stderr.trim() || result.stdout.trim()).split('\n')[0];
+    throw new Failure('unavailable', `gum rendering failed${reason ? `: ${diagnostic(reason.slice(0, 200))}` : ''}.`);
+  }
   return result.stdout.replace(/\n$/, '');
 }
 
@@ -79,19 +85,24 @@ export async function table(signal: AbortSignal, headers: string[], rows: string
   const csv = rows
     .map(row => row.map((cell, i) => `"${truncate(cell, widths[i]).replace(/"/g, '""')}"`).join(','))
     .join('\n');
-  return await gumText(
-    [
-      'table',
-      '--print',
-      '--border=rounded',
-      `--columns=${headers.join(',')}`,
-      `--widths=${widths.join(',')}`,
-      `--border.foreground=${palette.rule}`,
-      `--header.foreground=${palette.accent}`,
-      `--cell.foreground=${palette.text}`,
-      '--selected.foreground=',
-    ],
-    signal,
-    csv,
-  );
+  // The rows go through a private file: gum table ignores stdin when it isn't a pipe or a file.
+  return await scratch('gum-table-', async directory => {
+    const file = join(directory, 'rows.csv');
+    await writeFile(file, csv + '\n', { mode: 0o600 });
+    return await gumText(
+      [
+        'table',
+        '--print',
+        `--file=${file}`,
+        '--border=rounded',
+        `--columns=${headers.join(',')}`,
+        `--widths=${widths.join(',')}`,
+        `--border.foreground=${palette.rule}`,
+        `--header.foreground=${palette.accent}`,
+        `--cell.foreground=${palette.text}`,
+        '--selected.foreground=',
+      ],
+      signal,
+    );
+  });
 }
