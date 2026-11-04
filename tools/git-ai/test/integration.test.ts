@@ -891,7 +891,12 @@ process.stdin.on('end', () => {
   fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ command: args[0], clicolor: process.env.CLICOLOR_FORCE }) + '\\n');
   if (${JSON.stringify(mode)} === 'fail') { process.exitCode = 1; return; }
   if (args[0] === 'style') console.log('[style] ' + args.at(-1));
-  else if (args[0] === 'table') console.log('[table] ' + input.replace(/\\n/g, ' | '));
+  else if (args[0] === 'table') {
+    // Like real gum when stdin is a socket: rows only come from --file.
+    const file = args.find(arg => arg.startsWith('--file='));
+    if (!file) { console.log('no data provided'); process.exitCode = 1; return; }
+    console.log('[table] ' + fs.readFileSync(file.slice('--file='.length), 'utf8').trim().replace(/\\n/g, ' | '));
+  }
 });
 `,
     { mode: 0o700 },
