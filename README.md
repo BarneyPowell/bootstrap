@@ -49,7 +49,7 @@ are symlinks into it, so they update too. To pin a release instead, clone its ta
 
 <!-- x-release-please-start-version -->
 ```sh
-git clone -b v1.2.2 https://github.com/BarneyPowell/bootstrap.git
+git clone -b v1.3.0 https://github.com/BarneyPowell/bootstrap.git
 ```
 <!-- x-release-please-end -->
 
@@ -214,8 +214,8 @@ Examples:
 # Latest v1.x
 curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1/install.sh | bash
 
-# Exactly v1.2.2
-curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1.2.2/install.sh | bash
+# Exactly v1.3.0
+curl -fsSL https://raw.githubusercontent.com/BarneyPowell/bootstrap/v1.3.0/install.sh | bash
 ```
 <!-- x-release-please-end -->
 
